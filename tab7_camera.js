@@ -5,7 +5,7 @@
  * 依存: camera_base.js (状態), camera_angle.js (計算)
  * 他モジュール向け API:
  *   tabCameraModule.getBlockedSeatIds() → Set<seatId>   選択カメラで頭被りになる客席 (tab6 が赤表示に使用)
- *   tabCameraModule.getFovSelection()   → {seatIds, guestIds} | null   画角内の客席・登壇者 (立面図の絞り込み)
+ *   tabCameraModule.getFovSelection()   → {seatIds, guestIds, podiumIds} | null   画角内の客席・登壇者・司会台/演台 (立面図の絞り込み)
  *   tabCameraModule.analyze(cam)        → {aim, sim}    照準・画角 / 頭被りシミュレーション
  * ==============================================================================
  */
@@ -59,7 +59,8 @@
     if (!a) return null;
     return {
       seatIds: new Set(window.seats.filter(s => inFov(cam, a.aim, s.x, s.y)).map(s => s.id)),
-      guestIds: new Set(window.tabGuestsModule.list.filter(g => inFov(cam, a.aim, g.x, g.y)).map(g => g.id))
+      guestIds: new Set(window.tabGuestsModule.list.filter(g => inFov(cam, a.aim, g.x, g.y)).map(g => g.id)),
+      podiumIds: new Set((window.podiums || []).filter(p => inFov(cam, a.aim, p.x, p.y)).map(p => p.id))
     };
   }
 

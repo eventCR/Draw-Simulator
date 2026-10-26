@@ -162,8 +162,12 @@
 
   function drawSide(ctx) {
     const T = window.Core.drawText;
+    // 「画角内だけ立面図に表示」がONのときは、カメラの画角外の司会台・演台を描かない
+    const cm = window.tabCameraModule;
+    const fov = (cm && cm.getFovSelection) ? cm.getFovSelection() : null;
     window.podiums.forEach(p => {
       if (!p.enabled) return;
+      if (fov && fov.podiumIds && !fov.podiumIds.has(p.id)) return;
       const col = colorOf(p), bz = baseZOf(p);
       ctx.save();
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
