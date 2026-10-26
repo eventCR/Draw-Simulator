@@ -1,77 +1,206 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
-<html>
+<!DOCTYPE html>
+<html lang="ja">
 <head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <meta http-equiv="Content-Style-Type" content="text/css">
-  <title></title>
-  <meta name="Generator" content="Cocoa HTML Writer">
-  <meta name="CocoaVersion" content="2685.7">
-  <style type="text/css">
-    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px 'Hiragino Mincho ProN'; -webkit-text-stroke: #000000}
-    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 11.0px 'Hiragino Sans'; color: #000000; color: rgba(0, 0, 0, 0.85); -webkit-text-stroke: rgba(0, 0, 0, 0.85)}
-    p.p3 {margin: 0.0px 0.0px 0.0px 0.0px; font: 11.0px 'Helvetica Neue'; -webkit-text-stroke: #000000}
-    p.p4 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px 'Hiragino Mincho ProN'; -webkit-text-stroke: #000000; min-height: 18.0px}
-    p.p5 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px 'Hiragino Mincho ProN'; color: #000000; color: rgba(0, 0, 0, 0.85); -webkit-text-stroke: rgba(0, 0, 0, 0.85)}
-    span.s1 {font: 12.0px 'Apple Color Emoji'; font-kerning: none}
-    span.s2 {font-kerning: none}
-    span.s3 {font: 11.0px 'Apple Color Emoji'; font-kerning: none; color: rgba(0, 0, 0, 0.26); background-color: #a4a4a4; -webkit-text-stroke: 0px rgba(0, 0, 0, 0.26)}
-    span.s4 {font: 11.0px 'Helvetica Neue'; font-kerning: none; color: rgba(0, 0, 0, 0.26); background-color: #a4a4a4; -webkit-text-stroke: 0px rgba(0, 0, 0, 0.26)}
-    span.s5 {font-kerning: none; color: rgba(0, 0, 0, 0.26); background-color: #a4a4a4; -webkit-text-stroke: 0px rgba(0, 0, 0, 0.26)}
-    span.s6 {font: 12.0px 'Hiragino Mincho ProN'; font-kerning: none; -webkit-text-stroke: 0px #000000}
-    span.s7 {font: 11.0px 'Apple Color Emoji'; font-kerning: none; background-color: #a4a4a4}
-    span.s8 {font: 11.0px 'Helvetica Neue'; font-kerning: none; background-color: #a4a4a4}
-    span.s9 {font-kerning: none; background-color: #a4a4a4}
-    span.s10 {font: 12.0px 'Hiragino Mincho ProN'; font-kerning: none}
-    span.s11 {font-kerning: none; background-color: #ffffff}
-    span.s12 {font: 11.0px 'Hiragino Sans'; font-kerning: none; color: rgba(0, 0, 0, 0.85); background-color: #a4a4a4; -webkit-text-stroke: 0px rgba(0, 0, 0, 0.85)}
-    span.s13 {font: 11.0px 'Helvetica Neue'; font-kerning: none; color: rgba(0, 0, 0, 0.85); background-color: #a4a4a4; -webkit-text-stroke: 0px rgba(0, 0, 0, 0.85)}
-    span.s14 {font: 11.0px 'Lucida Grande'; font-kerning: none; color: rgba(0, 0, 0, 0.85); background-color: #a4a4a4; -webkit-text-stroke: 0px rgba(0, 0, 0, 0.85)}
-    span.s15 {font: 11.0px 'Hiragino Sans'; font-kerning: none; background-color: #a4a4a4}
-    span.s16 {font-kerning: none; -webkit-text-stroke: 0px #000000}
-  </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ENG Sightline &amp; Stage Simulator Mark2</title>
+  <link rel="stylesheet" href="style.css">
+  <script>
+    // 読み込み失敗(ファイルの置き忘れ・名前違い)を画面に出す
+    (function () {
+      var missing = [];
+      window.addEventListener('error', function (e) {
+        var t = e.target;
+        if (t && (t.tagName === 'SCRIPT' || t.tagName === 'LINK')) missing.push((t.getAttribute('src') || t.getAttribute('href')));
+      }, true);
+      window.addEventListener('load', function () {
+        if (!window.Core) missing.push('core_engine.js (Core が起動していません)');
+        if (!missing.length) return;
+        var d = document.createElement('div');
+        d.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#b91c1c;color:#fff;padding:10px 14px;font:13px/1.5 sans-serif;';
+        d.innerHTML = '<b>⚠ 次のファイルを読み込めませんでした:</b> ' + missing.join(', ') +
+          '<br>index.html と同じフォルダに、全19ファイルを元の名前のまま置いてください (「(1)」などが付いていないか確認)。';
+        document.body.appendChild(d);
+      });
+    })();
+  </script>
 </head>
 <body>
-<p class="p1"><span class="s1">📐</span><span class="s2"> Draw-Simulator Mark2</span></p>
-<p class="p2"><span class="s3">↩️</span><span class="s4"> </span><span class="s5">戻す</span><span class="s6"> </span><span class="s3">↪️</span><span class="s4"> </span><span class="s5">進む</span><span class="s6"> | </span><span class="s7">💾</span><span class="s8"> </span><span class="s9">名前をつけて保存</span><span class="s6"> </span><span class="s7">📂</span><span class="s8"> </span><span class="s9">開く</span><span class="s6"> </span><span class="s7">📸</span><span class="s8"> </span><span class="s9">画像出力</span><span class="s8"> (.png)</span><span class="s6"> </span><span class="s7">📏</span><span class="s8"> </span><span class="s9">計測</span><span class="s6"> </span><span class="s7">🛠️</span><span class="s8"> </span><span class="s9">パレット開閉</span></p>
-<p class="p1"><span class="s1">💾</span><span class="s2"> 名前をつけて保存</span></p>
-<p class="p3"><span class="s10">ファイル名 (.json) </span><span class="s11">Venue_Layout_Mark2.json</span></p>
-<p class="p2"><span class="s9">キャンセル</span><span class="s6"> </span><span class="s9">保存</span></p>
-<p class="p4"><span class="s2"></span><br></p>
-<p class="p1"><span class="s1">📊</span><span class="s2"> 図面サマリー</span><span class="s1">🗺️</span><span class="s2"> 平面図</span></p>
-<p class="p1"><span class="s2">会場外郭:<b>--</b><b></b></span></p>
-<p class="p1"><span class="s2">ステージ:<b>--</b><b></b></span></p>
-<p class="p1"><span class="s2">客席数:<b>--</b><b></b></span></p>
-<p class="p1"><span class="s2">良好 (視界クリア):<b>0 席</b><b></b></span></p>
-<p class="p1"><span class="s2">視野干渉 (頭被り):<b>0 席</b><b></b></span></p>
-<p class="p1"><span class="s2">↔ 立面スクロール (奥行き): </span><span class="s12">◀</span><span class="s13"> -1m</span><span class="s2"> </span><span class="s13">+1m </span><span class="s14">▶</span><span class="s2"> 0.0m</span></p>
-<p class="p5"><span class="s7">🗺️</span><span class="s8"> </span><span class="s15">平面図</span><span class="s16"> </span><span class="s7">📐</span><span class="s8"> </span><span class="s15">立面図</span><span class="s16"> | </span><span class="s15">－</span><span class="s16"> 100% </span><span class="s15">＋</span><span class="s16"> </span><span class="s8">100%</span><span class="s16"> </span><span class="s15">中央</span><span class="s16"> | </span><span class="s7">👁️</span><span class="s8"> </span><span class="s15">視野角</span></p>
-<p class="p1"><span class="s1">🛠️</span><span class="s2"> 意見・デバッグBOX</span></p>
-<p class="p2"><span class="s9">消去</span><span class="s6"> </span><span class="s9">－</span></p>
-<p class="p2"><span class="s7">📋</span><span class="s8"> </span><span class="s9">ログ・診断</span><span class="s6"> </span><span class="s7">✉️</span><span class="s8"> </span><span class="s9">ご意見送信</span></p>
-<p class="p4"><span class="s2"></span><br></p>
-<p class="p4"><span class="s2"></span><br></p>
-<p class="p4"><span class="s2"></span><br></p>
-<p class="p1"><span class="s2">図面状態を添付 </span><span class="s12">メール送信</span></p>
-<p class="p4"><span class="s2"></span><br></p>
-<p class="p1"><span class="s2">ステージ</span></p>
-<p class="p1"><span class="s2">パネル</span></p>
-<p class="p1"><span class="s2">登壇者</span></p>
-<p class="p1"><span class="s2">司会台</span></p>
-<p class="p1"><span class="s2">モニター</span></p>
-<p class="p1"><span class="s2">カメラ</span></p>
-<p class="p1"><span class="s1">🛠️</span><span class="s2"> 図面パラメータ設定 </span><span class="s14">▼</span></p>
-<p class="p2"><span class="s7">🏛</span><span class="s8"> </span><span class="s9">会場</span><span class="s6"> </span><span class="s7">🏢</span><span class="s8"> </span><span class="s9">会場設備</span><span class="s6"> </span><span class="s7">🎤</span><span class="s8"> </span><span class="s9">司会台</span><span class="s6"> </span><span class="s7">👤</span><span class="s8"> </span><span class="s9">登壇者</span><span class="s6"> </span><span class="s7">🪑</span><span class="s8"> </span><span class="s9">舞台什器</span><span class="s6"> </span><span class="s7">👥</span><span class="s8"> </span><span class="s9">客席</span><span class="s6"> </span><span class="s7">🎥</span><span class="s8"> </span><span class="s9">カメラ</span><span class="s6"> </span><span class="s7">👁️</span><span class="s8"> </span><span class="s9">表示設定</span><span class="s6"> </span><span class="s7">🎛️</span><span class="s8"> </span><span class="s9">機材備品</span><span class="s6"> </span><span class="s7">📺</span><span class="s8"> </span><span class="s9">モニター</span><span class="s6"> </span><span class="s7">🖼️</span><span class="s8"> </span><span class="s9">図面挿入</span><span class="s6"> </span><span class="s7">🤖</span><span class="s8"> AI</span><span class="s9">生成</span></p>
-<p class="p4"><span class="s2"></span><br></p>
-<p class="p4"><span class="s2"></span><br></p>
-<p class="p4"><span class="s2"></span><br></p>
-<p class="p4"><span class="s2"></span><br></p>
-<p class="p4"><span class="s2"></span><br></p>
-<p class="p4"><span class="s2"></span><br></p>
-<p class="p4"><span class="s2"></span><br></p>
-<p class="p4"><span class="s2"></span><br></p>
-<p class="p4"><span class="s2"></span><br></p>
-<p class="p4"><span class="s2"></span><br></p>
-<p class="p4"><span class="s2"></span><br></p>
-<p class="p4"><span class="s2"></span><br></p>
+
+  <!-- 上部ツールバー : ボタンは data-action で core_engine.js の actions に接続 -->
+  <header id="top-toolbar">
+    <div class="toolbar-title"><span>📐 会場図面 &amp; ENG視界シミュレーター Mark2</span></div>
+    <div class="toolbar-actions">
+      <button class="ctrl-btn" id="btnUndo" data-action="undo" title="元に戻す (Ctrl+Z)" disabled>↩️ 戻す</button>
+      <button class="ctrl-btn" id="btnRedo" data-action="redo" title="やり直す (Ctrl+Y)" disabled>↪️ 進む</button>
+      <span class="toolbar-divider">|</span>
+      <button class="btn-action" data-action="save">💾 名前をつけて保存</button>
+      <button class="btn-action" data-action="open">📂 開く</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+      <button class="btn-action btn-primary" data-action="exportPng">📸 画像出力 (.png)</button>
+      <button class="btn-action" id="btn-measure" data-action="measure" title="計測ツール (Escで終了)">📏 計測</button>
+      <button class="btn-action" data-action="palette">🛠️ パレット開閉</button>
+    </div>
+  </header>
+
+  <!-- 名前をつけて保存 -->
+  <div id="saveModal">
+    <div class="modal-card">
+      <div class="modal-title">💾 名前をつけて保存</div>
+      <div class="input-box">
+        <label for="modalFileName">ファイル名 (.json)</label>
+        <input type="text" id="modalFileName" value="Venue_Layout_Mark2.json">
+      </div>
+      <div class="modal-buttons">
+        <button class="btn-action" data-action="closeSave">キャンセル</button>
+        <button class="btn-action btn-primary" data-action="confirmSave">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <main id="main-container">
+    <canvas id="simCanvas"></canvas>
+  </main>
+
+  <!-- HUD: 左上サマリー -->
+  <div class="hud-left-top">
+    <div class="info-card">
+      <div class="card-title"><span>📊 図面サマリー</span><span id="viewModeBadge" class="badge-view">🗺️ 平面図</span></div>
+      <div class="stats-row"><span>会場外郭:</span><strong id="statRoom">--</strong></div>
+      <div class="stats-row"><span>ステージ:</span><strong id="statStage">--</strong></div>
+      <div class="stats-row"><span>客席数:</span><strong id="statSeats">--</strong></div>
+      <div class="stats-row text-success"><span>良好 (視界クリア):</span><strong id="statClear">0 席</strong></div>
+      <div class="stats-row text-warning"><span>視野干渉 (頭被り):</span><strong id="statPartial">0 席</strong></div>
+    </div>
+  </div>
+
+  <!-- HUD: 立面スクロール -->
+  <div id="side-scrollbar-container">
+    <label for="side-scroll-range">↔ 立面スクロール (奥行き):</label>
+    <button class="scroll-step-btn" data-action="sideStep" data-arg="-1000">◀ -1m</button>
+    <input type="range" id="side-scroll-range" min="0" max="0" value="0" step="100">
+    <button class="scroll-step-btn" data-action="sideStep" data-arg="1000">+1m ▶</button>
+    <span id="sideScrollValDisplay" class="slice-val">0.0m</span>
+  </div>
+
+  <!-- HUD: 右上コントロール -->
+  <div class="top-right-controls">
+    <div class="control-panel">
+      <button class="view-btn active" id="btn-top" data-action="viewTop">🗺️ 平面図</button>
+      <button class="view-btn" id="btn-side" data-action="viewSide">📐 立面図</button>
+      <span class="panel-divider">|</span>
+      <button class="ctrl-btn" data-action="zoomOut" title="縮小">－</button>
+      <span class="zoom-badge" id="zoomBadge">100%</span>
+      <button class="ctrl-btn" data-action="zoomIn" title="拡大">＋</button>
+      <button class="ctrl-btn" data-action="zoom100" title="等倍">100%</button>
+      <button class="ctrl-btn" data-action="center" title="画面中央に配置">中央</button>
+      <span class="panel-divider">|</span>
+      <button class="ctrl-btn active" id="btn-fov" data-action="toggleFov" title="カメラ視野角の表示">👁️ 視野角</button>
+    </div>
+  </div>
+
+  <!-- HUD: 左下 意見BOX + 凡例 -->
+  <div class="hud-left-bottom">
+    <div id="debug-box" class="debug-box">
+      <div class="debug-box-header">
+        <span class="debug-box-title">🛠️ 意見・デバッグBOX</span>
+        <div class="debug-box-actions">
+          <button type="button" class="btn-debug-action" data-dbg="clear">消去</button>
+          <button type="button" class="btn-debug-action" id="btn-debug-toggle" data-dbg="toggle">－</button>
+        </div>
+      </div>
+      <div id="debug-box-body" class="debug-box-body">
+        <div class="debug-tab-bar">
+          <button type="button" class="debug-tab-btn active" data-dbg-tab="log">📋 ログ・診断</button>
+          <button type="button" class="debug-tab-btn" data-dbg-tab="mail">✉️ ご意見送信</button>
+        </div>
+        <div id="panel-dbg-log" class="debug-panel active">
+          <div id="debug-box-content" class="debug-box-content"></div>
+        </div>
+        <div id="panel-dbg-mail" class="debug-panel">
+          <div class="debug-mail-form">
+            <div class="dbg-form-row"><input type="text" id="feedback-sender" placeholder="お名前・担当 (例: クラフト)"></div>
+            <div class="dbg-form-row"><textarea id="feedback-content" rows="3" placeholder="不具合報告や欲しい機能を入力..."></textarea></div>
+            <div class="dbg-form-footer">
+              <label class="dbg-checkbox-label"><input type="checkbox" id="feedback-attach-state" checked> 図面状態を添付</label>
+              <button type="button" class="btn-dbg-send" id="btn-dbg-send" data-dbg="send">メール送信</button>
+            </div>
+            <div id="feedback-status" class="feedback-status-msg"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><span class="legend-symbol sym-stage"></span>ステージ</div>
+      <div class="legend-item"><span class="legend-symbol sym-panel"></span>パネル</div>
+      <div class="legend-item"><span class="legend-symbol sym-guest"></span>登壇者</div>
+      <div class="legend-item"><span class="legend-symbol sym-podium"></span>司会台</div>
+      <div class="legend-item"><span class="legend-symbol sym-monitor"></span>モニター</div>
+      <div class="legend-item"><span class="legend-symbol sym-cam"></span>カメラ</div>
+    </div>
+  </div>
+
+  <!-- フローティング操作パレット -->
+  <div id="floating-ui">
+    <div id="floating-header" title="ドラッグで移動 / ダブルクリックで折りたたみ">
+      <span>🛠️ 図面パラメータ設定</span>
+      <button class="ctrl-btn" id="palette-collapse" data-action="collapsePalette" title="折りたたみ">▼</button>
+    </div>
+    <div id="floating-body">
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="room">🏛 会場</button>
+        <button class="tab-btn" data-tab="facility">🏢 会場設備</button>
+        <button class="tab-btn" data-tab="podium">🎤 司会台</button>
+        <button class="tab-btn" data-tab="guests">👤 登壇者</button>
+        <button class="tab-btn" data-tab="stage_items">🪑 舞台什器</button>
+        <button class="tab-btn" data-tab="seats">👥 客席</button>
+        <button class="tab-btn" data-tab="camera">🎥 カメラ</button>
+        <button class="tab-btn" data-tab="display">👁️ 表示設定</button>
+        <button class="tab-btn" data-tab="equipment">🎛️ 機材備品</button>
+        <button class="tab-btn" data-tab="monitor">📺 モニター</button>
+        <button class="tab-btn" data-tab="bgimage">🖼️ 図面挿入</button>
+        <button class="tab-btn" data-tab="ai_gen">🤖 AI生成</button>
+      </div>
+      <!-- 各 tabN_*.js が init() で #panel-<key> に UI を注入する -->
+      <div class="tab-content" id="tab-content-container">
+        <div class="tab-panel active" id="panel-room"></div>
+        <div class="tab-panel" id="panel-facility"></div>
+        <div class="tab-panel" id="panel-podium"></div>
+        <div class="tab-panel" id="panel-guests"></div>
+        <div class="tab-panel" id="panel-stage_items"></div>
+        <div class="tab-panel" id="panel-seats"></div>
+        <div class="tab-panel" id="panel-camera"></div>
+        <div class="tab-panel" id="panel-display"></div>
+        <div class="tab-panel" id="panel-equipment"></div>
+        <div class="tab-panel" id="panel-monitor"></div>
+        <div class="tab-panel" id="panel-bgimage"></div>
+        <div class="tab-panel" id="panel-ai_gen"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 読み込み順: core → debug → タブ1-6 → カメラ(base→angle→tab7) → タブ8-12 → 計測 -->
+  <script src="core_engine.js"></script>
+  <script src="debug_box.js"></script>
+
+  <script src="tab1_room.js"></script>
+  <script src="tab2_facility.js"></script>
+  <script src="tab3_podium.js"></script>
+  <script src="tab4_guests.js"></script>
+  <script src="tab5_stage_items.js"></script>
+  <script src="tab6_seats.js"></script>
+
+  <script src="camera_base.js"></script>
+  <script src="camera_angle.js"></script>
+  <script src="tab7_camera.js"></script>
+
+  <script src="tab8_display.js"></script>
+  <script src="tab9_equipment.js"></script>
+  <script src="tab10_monitor.js"></script>
+  <script src="tab11_bgimage.js"></script>
+  <script src="tab12_ai_gen.js"></script>
+
+  <script src="measure_tool.js"></script>
 </body>
 </html>
