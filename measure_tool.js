@@ -35,6 +35,7 @@ window.MeasureTool = (function () {
   let canvas = null;
   let panel = null;
   let seq = 0;
+  let gridSnap = false;      // グリッド吸着 (既定OFF: 1m単位に勝手に丸められて寸法が合わなくなるため)
 
   const uid = () => 'ms' + Date.now().toString(36) + (seq++);
   const curMode = () => (window.viewMode === 'side' ? 'side' : 'top');
@@ -54,7 +55,10 @@ window.MeasureTool = (function () {
     return { u, v };
   }
 
-  function fmt(mm) {
+  // 寸法は mm まで正確に表示する (オブジェクトの寸法と見比べられるように丸めない)
+  function fmt(mm) { return Math.round(mm).toLocaleString('en-US') + 'mm'; }
+  // 定規の目盛り用の短い表記
+  function fmtTick(mm) {
     const a = Math.abs(mm);
     return a >= 1000 ? (Math.round(mm / 10) / 100) + 'm' : Math.round(mm) + 'mm';
   }
@@ -76,8 +80,11 @@ window.MeasureTool = (function () {
     const headZ = window.totalHeadZ || 1270;
 
     if (room) {
-      if (top) [[0, 0], [room.w, 0], [0, room.d], [room.w, room.d]].forEach(p => add(p[0], p[1], 'room'));
-      else [0, room.d].forEach(y => add(y, 0, 'room'));
+      if (top) {
+        if (Array.isArray(room.points) && room.points.length) room.points.forEach(p => add(p.x, p.y, 'room'));
+        else [[0, 0], [room.w, 0], [0, room.d], [room.w, room.d]].forEach(p => add(p[0], p[1], 'room'));
+      }
+      else [0, room.d].forEach(y => { add(y, 0, 'room'); if (room.h) add(y, room.h, 'room'); });
     }
     if (st) {
       if (top) {
@@ -105,12 +112,54 @@ window.MeasureTool = (function () {
       if (gm.getHeadTopZ) add(g.y, gm.getHeadTopZ(g), 'guest');                      // 頭頂
     });
     if (Array.isArray(window.seats)) {
+      const ch = window.chair || { w: 500, d: 500, h: 420 };
       window.seats.forEach(s => {
-        if (top) add(s.x, s.y, 'seat');
-        else { add(s.y, 0, 'seat'); add(s.y, headZ, 'seat'); }
+        if (top) { add(s.x, s.y, 'seat'); addRect(s.x, s.y, ch.w, ch.d, s.angle, 'seat'); }
+        else { addRectSide(s.x, s.y, ch.w, ch.d, s.angle, 0, ch.h, 'seat'); add(s.y, headZ, 'seat'); }
       });
     }
+    // 舞台・会場の各オブジェクト: 角と中心 (回転を考慮)
+    const stageH = (st && st.h) || 0;
+    const onStage = (x, y) => (typeof window.isInsideStage === 'function') ? window.isInsideStage(x, y) : false;
+    (window.podiums || []).forEach(o => { if (o.enabled !== false) obj(o.x, o.y, o.w, o.d, o.angle, o.h, onStage(o.x, o.y) ? stageH : 0, 'podium'); });
+    (window.stageItems || []).forEach(o => {
+      const base = o.baseType === 'floor' ? 0 : (o.baseType === 'stage' ? stageH : (onStage(o.x, o.y) ? stageH : 0));
+      obj(o.x, o.y, o.w, o.shape === 'circle' ? o.w : o.d, o.angle, o.h, base, 'item', o.shape === 'circle');
+    });
+    (window.equipments || []).forEach(o => obj(o.x, o.y, o.w, o.d, o.angle, o.h, onStage(o.x, o.y) ? stageH : 0, 'equip'));
+    (window.monitors || []).forEach(o => {
+      obj(o.x, o.y, o.baseW || o.w, o.baseD || o.d || 400, o.panAngle, 0, o.placeOn === 'stage' ? stageH : 0, 'monitor');
+    });
+    const fm = window.tabFacilityModule;
+    (window.panels || []).forEach(p => {
+      if (p.enabled === false) return;
+      const pos = fm && fm.getPanelPos ? fm.getPanelPos(p) : { x: p.x, y: p.y };
+      if (!pos) return;
+      obj(pos.x + p.w / 2, pos.y + p.d / 2, p.w, p.d, 0, p.h, p.posType === 'behind_stage' && !p.customPos ? 0 : stageH, 'panel');
+    });
     return pts;
+
+    // ---- 以下、スナップ点の追加ヘルパー (関数宣言なので上から参照できる) ----
+    function corners(cx, cy, w, d, ang) {
+      const r = (ang || 0) * Math.PI / 180, c = Math.cos(r), sn = Math.sin(r), hw = w / 2, hd = d / 2;
+      return [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(q => ({ x: cx + q[0] * c - q[1] * sn, y: cy + q[0] * sn + q[1] * c }));
+    }
+    function addRect(cx, cy, w, d, ang, k) { corners(cx, cy, w, d, ang).forEach(q => add(q.x, q.y, k)); }
+    function addRectSide(cx, cy, w, d, ang, z0, h, k) {
+      const ys = corners(cx, cy, w, d, ang).map(q => q.y), y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+      [y0, y1].forEach(y => { add(y, z0, k); if (h) add(y, z0 + h, k); });
+    }
+    function obj(cx, cy, w, d, ang, h, z0, k, circle) {
+      if (!Number.isFinite(cx) || !Number.isFinite(cy) || !(w > 0)) return;
+      d = d > 0 ? d : w;
+      if (top) {
+        add(cx, cy, k);
+        if (circle) [[w / 2, 0], [-w / 2, 0], [0, w / 2], [0, -w / 2]].forEach(q => add(cx + q[0], cy + q[1], k));
+        else addRect(cx, cy, w, d, ang, k);
+      } else {
+        addRectSide(cx, cy, w, d, circle ? 0 : ang, z0, h, k);
+      }
+    }
   }
 
   function snap(p, altKey) {
@@ -122,6 +171,7 @@ window.MeasureTool = (function () {
       if (d < bd) { bd = d; best = q; }
     });
     if (best) return { u: best.u, v: best.v, kind: 'object' };
+    if (!gridSnap) return { u: p.u, v: p.v, kind: 'free' };
     const gu = 1000, gv = (m === 'top') ? 1000 : 100;
     const su = Math.round(p.u / gu) * gu, sv = Math.round(p.v / gv) * gv;
     if (Math.abs(su - p.u) * s <= GRID_PX && Math.abs(sv - p.v) * s <= GRID_PX) return { u: su, v: sv, kind: 'grid' };
@@ -298,6 +348,7 @@ window.MeasureTool = (function () {
         <button class="mp-btn" data-act="undo">↩ 直前を消す</button>
         <button class="mp-btn" data-act="clear">全消去</button>
         <label><input type="checkbox" id="mp-visible" checked> 表示</label>
+        <label><input type="checkbox" id="mp-grid"> グリッド吸着(1m)</label>
         <button class="mp-btn" data-act="close">✕ 終了</button>
       </div>
       <div class="mp-hint" id="mp-hint"></div>
@@ -312,6 +363,8 @@ window.MeasureTool = (function () {
     }));
     const cb = panel.querySelector('#mp-visible');
     if (cb) cb.addEventListener('change', e => { visible = !!e.target.checked; redraw(); });
+    const gb = panel.querySelector('#mp-grid');
+    if (gb) gb.addEventListener('change', e => { gridSnap = !!e.target.checked; });
   }
 
   function updatePanel() {
@@ -320,7 +373,7 @@ window.MeasureTool = (function () {
     const hints = {
       p2p: pending
         ? '2点目をクリック (Shift: 15°刻み / Alt: 吸着なし / 右クリック: キャンセル)'
-        : '1点目をクリック。カメラ・登壇者・席・ステージ角・グリッドに吸着します (右クリック: 寸法線を削除)',
+        : '1点目をクリック。カメラ・登壇者・席・各オブジェクトの角と中心・ステージ角に吸着します (右クリック: 寸法線を削除)',
       drag: 'ドラッグしている間だけ、長さと角度を表示します (Shift: 15°刻み / Alt: 吸着なし)',
       ruler: '空いた所をクリック/ドラッグで定規を置く。端点で長さ・角度、本体で移動、右クリックまたはDeleteで削除'
     };
@@ -448,7 +501,7 @@ window.MeasureTool = (function () {
       const x = i * minor;
       if (x % major !== 0 || x > L - px(14)) continue;
       ctx.save(); ctx.translate(x, px(6)); if (flip) ctx.rotate(Math.PI);
-      ctx.fillText(fmt(x), 0, 0);
+      ctx.fillText(fmtTick(x), 0, 0);
       ctx.restore();
     }
 
