@@ -106,7 +106,7 @@
     const modelOpts = Object.keys(CB.CAMERA_MODELS).map(k => '<option value="' + k + '">' + CB.CAMERA_MODELS[k].name + '</option>').join('');
     panel.innerHTML = `
       <div class="ui-group">
-        <div class="ui-group-title"><span>🎥 カメラ機材 &amp; ショット</span><button class="btn-action sm" id="btnAddCam">＋ 追加</button></div>
+        <div class="ui-group-title"><span>🎥 カメラ機材 &amp; ショット</span><button class="btn-action sm" id="btnAddCam">＋ カメラ追加</button></div>
         <div class="ui-row full"><div class="input-box"><label>対象カメラ</label><select id="camSelect"></select></div></div>
         <div id="camSummary" class="readout"></div>
         <div class="ui-row full"><div class="input-box"><label>カメラ機種・レンズ仕様</label><select id="camModel">${modelOpts}</select></div></div>
@@ -146,24 +146,35 @@
       </div>
 
       <div class="ui-group">
-        <div class="ui-group-title">カメラ位置 &amp; イントレ台</div>
+        <div class="ui-group-title"><span>カメラ位置</span><button class="btn-action sm btn-danger" id="btnDeleteCam">このカメラを削除</button></div>
+        <div class="ui-row full"><div class="input-box"><label>載せるイントレ (台)</label><select id="camPlatform"></select></div></div>
         <div class="ui-row">
           <div class="input-box"><label>位置 X (mm)</label><input type="number" id="camX" step="100"></div>
           <div class="input-box"><label>位置 Y (mm)</label><input type="number" id="camY" step="100"></div>
-        </div>
-        <div class="ui-row">
           <div class="input-box"><label>レンズ全高 (Z mm)</label><input type="number" id="camH" step="50"></div>
-          <div class="input-box"><label>台高 (H mm)</label><input type="number" id="platH" step="50"></div>
+        </div>
+        <div class="hint">台に載せたカメラは、台の上だけで動かせます。台を動かすと、載っているカメラ全部が一緒に動きます。台を変えても、レンズの高さは保たれます。</div>
+      </div>
+
+      <div class="ui-group">
+        <div class="ui-group-title"><span>🏗️ イントレ台 (複数台のカメラを載せられます)</span><button class="btn-action sm" id="btnAddPlat">＋ 台を追加</button></div>
+        <div class="ui-row full"><div class="input-box"><label>対象の台</label><select id="platSelect"></select></div></div>
+        <div class="hint" id="platCamList"></div>
+        <div class="ui-row full"><div class="input-box"><label>名称</label><input type="text" id="platName"></div></div>
+        <div class="ui-row">
+          <div class="input-box"><label>中心 X (mm)</label><input type="number" id="platX" step="100"></div>
+          <div class="input-box"><label>中心 Y (mm)</label><input type="number" id="platY" step="100"></div>
         </div>
         <div class="ui-row">
           <div class="input-box"><label>台幅 W (mm)</label><input type="number" id="platW" step="100"></div>
           <div class="input-box"><label>台奥 D (mm)</label><input type="number" id="platD" step="100"></div>
+          <div class="input-box"><label>台高 H (mm)</label><input type="number" id="platH" step="50"></div>
         </div>
         <div class="ui-row">
           <div class="input-box"><label>最後尾席からの距離 (mm)</label><input type="number" id="camDistFromLastRow" value="2000" step="100"></div>
           <button class="btn-action" id="btnAlignLastRow">最後尾から配置</button>
         </div>
-        <div class="ui-row" style="justify-content:flex-end"><button class="btn-action sm btn-danger" id="btnDeleteCam">このカメラを削除</button></div>
+        <div class="ui-row" style="justify-content:flex-end"><button class="btn-action sm btn-danger" id="btnDelPlat">この台を削除 (載っているカメラは台なしに)</button></div>
       </div>`;
     bind();
     updateUI();
@@ -182,9 +193,26 @@
       updateUI(); redraw(); commit('カメラ削除');
     });
     $('btnAlignLastRow').addEventListener('click', () => {
-      if (!sel()) return;
-      CB.alignFromLastRow(sel(), num('camDistFromLastRow', 2000), window.seats, window.chair.d);
-      updateUI(); redraw(); commit('カメラを最後尾から配置');
+      const target = CB.getSelectedPlatform() || sel();            // 台があれば台 (載っているカメラも一緒に移動)
+      if (!target) return;
+      CB.alignFromLastRow(target, num('camDistFromLastRow', 2000), window.seats, window.chair.d);
+      updateUI(); redraw(); commit('台を最後尾から配置');
+    });
+    $('btnAddPlat').addEventListener('click', () => {
+      CB.addPlatform(window.room.w, window.stage.y, window.stage.d);
+      updateUI(); redraw(); commit('イントレ追加');
+    });
+    $('btnDelPlat').addEventListener('click', () => {
+      const p = CB.getSelectedPlatform(); if (!p) return;
+      CB.deletePlatform(p.id);
+      updateUI(); redraw(); commit('イントレ削除');
+    });
+    $('platSelect').addEventListener('change', e => { CB.setSelectedPlatformId(e.target.value); updateUI(); redraw(); });
+    $('camPlatform').addEventListener('change', e => {
+      const c = sel(); if (!c) return;
+      CB.assignCamera(c, e.target.value);
+      if (c.platformId) CB.setSelectedPlatformId(c.platformId);
+      updateUI(); redraw(); commit('カメラの台を変更');
     });
     $('camSelect').addEventListener('change', e => { CB.setSelectedId(e.target.value); updateUI(); redraw(); });
 
@@ -217,20 +245,27 @@
       $(id).addEventListener('change', () => commit('カメラ角度'));
     });
 
-    [['camX', 'x'], ['camY', 'y'], ['camH', 'lensH'], ['platW', 'platW'], ['platD', 'platD']].forEach(([id, prop]) =>
-      $(id).addEventListener('change', e => {
-        const c = sel(); if (!c) return;
-        const v = parseFloat(e.target.value);
-        if (isFinite(v)) c[prop] = v;
-        updateUI(); redraw(); commit('カメラ設定');
-      }));
-
-    $('platH').addEventListener('change', e => {            // 台高を変えたらレンズ高も同じだけ動かす
+    // カメラの絶対位置・レンズ高 (台に載っていれば台の上のずれ・天板からの高さとして記録される)
+    ['camX', 'camY'].forEach(id => $(id).addEventListener('change', () => {
       const c = sel(); if (!c) return;
-      const nv = Math.max(0, num('platH', 0)), diff = nv - (c.platH || 0);
-      c.platH = nv; c.lensH = (c.lensH || 1850) + diff;
-      updateUI(); redraw(); commit('台高');
+      CB.moveCameraTo(c, num('camX', c.x), num('camY', c.y));
+      updateUI(); redraw(); commit('カメラ位置');
+    }));
+    $('camH').addEventListener('change', () => {
+      const c = sel(); if (!c) return;
+      CB.setLensHeight(c, Math.max(0, num('camH', c.lensH)));
+      updateUI(); redraw(); commit('レンズ高');
     });
+
+    // イントレ台。台を変えると載っているカメラが追従する
+    ['platName', 'platX', 'platY', 'platW', 'platD', 'platH'].forEach(id => $(id).addEventListener('change', () => {
+      const p = CB.getSelectedPlatform(); if (!p) return;
+      p.name = $('platName').value || p.name;
+      p.x = num('platX', p.x); p.y = num('platY', p.y);
+      p.w = Math.max(100, num('platW', p.w)); p.d = Math.max(100, num('platD', p.d)); p.h = Math.max(0, num('platH', p.h));
+      CB.syncAll();
+      updateUI(); redraw(); commit('イントレ変更');
+    }));
 
     $('camFovProj').addEventListener('change', e => { showFovProjection = e.target.checked; updateUI(true); redraw(); commit('画角内表示'); });
   }
@@ -241,6 +276,24 @@
     if (aim.status === 'tele_limit') t += '\n・⚠️ 望遠端に到達 (これ以上寄れません)';
     if (aim.status === 'wide_limit') t += '\n・⚠️ 広角端に到達 (被写体が画角に収まりません)';
     return t;
+  }
+
+  /** イントレ台の欄 (カメラが0台でも更新する) */
+  function updatePlatformUI(light) {
+    const plats = CB.getPlatforms(), cam = CB.getSelected(), p = CB.getSelectedPlatform();
+    if (!light) {
+      U.fillSelect('platSelect', plats.length ? plats.map(x => ({ value: x.id, label: x.name + ' (' + CB.camerasOn(x.id).length + '台)' })) : [{ value: '', label: '※ 台がありません' }], p ? p.id : '');
+      U.fillSelect('camPlatform', [{ value: '', label: '台なし (床置き三脚)' }].concat(plats.map(x => ({ value: x.id, label: x.name }))), cam ? (cam.platformId || '') : '');
+    }
+    ['platSelect', 'platName', 'platX', 'platY', 'platW', 'platD', 'platH', 'btnAlignLastRow', 'btnDelPlat'].forEach(id => { $(id).disabled = !p; });
+    $('camPlatform').disabled = !cam;
+    if (!p) { ['platName', 'platX', 'platY', 'platW', 'platD', 'platH'].forEach(id => { $(id).value = ''; }); $('platCamList').textContent = ''; return; }
+    $('platSelect').value = p.id;
+    $('platName').value = p.name;
+    $('platX').value = Math.round(p.x); $('platY').value = Math.round(p.y);
+    $('platW').value = Math.round(p.w); $('platD').value = Math.round(p.d); $('platH').value = Math.round(p.h);
+    const on = CB.camerasOn(p.id);
+    $('platCamList').textContent = on.length ? '載っているカメラ: ' + on.map(c => c.name).join(' / ') : '載っているカメラはありません';
   }
 
   /** light=true: スライダー操作中。セレクトの再構築を省く */
@@ -254,7 +307,8 @@
       U.fillSelect('camTargetGuest', window.tabGuestsModule.list.map(g => ({ value: g.id, label: g.name || g.id })), cam ? cam.targetGuestId : '');
     }
 
-    const ids = ['camSelect', 'camModel', 'camShotType', 'camFraming', 'camTargetGuest', 'camFovSlider', 'camPanSlider', 'camTiltSlider', 'camX', 'camY', 'camH', 'platH', 'platW', 'platD', 'btnAlignLastRow', 'btnDeleteCam'];
+    updatePlatformUI(light);
+    const ids = ['camSelect', 'camModel', 'camShotType', 'camFraming', 'camTargetGuest', 'camFovSlider', 'camPanSlider', 'camTiltSlider', 'camX', 'camY', 'camH', 'camPlatform', 'btnDeleteCam'];
     ids.forEach(id => { $(id).disabled = !cam; });
     $('camFovProj').checked = showFovProjection;
 
@@ -266,7 +320,7 @@
     $('camModel').value = cam.model || 'eng_std';
     $('camShotType').value = cam.shotType || 'stage_ff';
     $('camX').value = Math.round(cam.x); $('camY').value = Math.round(cam.y); $('camH').value = Math.round(cam.lensH);
-    $('platW').value = Math.round(cam.platW); $('platD').value = Math.round(cam.platD); $('platH').value = Math.round(cam.platH);
+    $('camPlatform').value = cam.platformId || '';
 
     const def = CB.CAMERA_MODELS[cam.model] || { minFov: 0.5, maxFov: 120 };
     const manual = cam.shotType === 'manual_angle' || cam.shotType === 'manual';
@@ -341,19 +395,28 @@
   // ---------------------------------------------------------------- 描画
   function drawTop(ctx) {
     const T = window.Core.drawText, cams = CB.getAll();
-    if (!cams.length) return;
-    const selId = (CB.getSelected() || {}).id, showFov = window.displaySettings.showCamFov;
+    const selCam = CB.getSelected(), selId = (selCam || {}).id, showFov = window.displaySettings.showCamFov;
 
-    cams.forEach(cam => {
-      const a = analyze(cam), sel = cam.id === selId;
-      const pw = cam.platW || 1000, pd = cam.platD || 1000;
-
+    // イントレ台 (カメラとは独立。先に描いて、カメラをその上に重ねる)
+    const selPlatId = CB.getSelectedPlatformId();
+    CB.getPlatforms().forEach(p => {
+      const sel = p.id === selPlatId;
       ctx.save();
       ctx.fillStyle = sel ? 'rgba(236,72,153,0.25)' : 'rgba(203,213,225,0.4)';
       ctx.strokeStyle = sel ? '#ec4899' : '#64748b';
       ctx.lineWidth = sel ? 30 : 20;
-      ctx.fillRect(cam.x - pw / 2, cam.y - pd / 2, pw, pd);
-      ctx.strokeRect(cam.x - pw / 2, cam.y - pd / 2, pw, pd);
+      ctx.fillRect(p.x - p.w / 2, p.y - p.d / 2, p.w, p.d);
+      ctx.strokeRect(p.x - p.w / 2, p.y - p.d / 2, p.w, p.d);
+      ctx.restore();
+      T(ctx, p.name + ' (H:' + Math.round(p.h) + ')', p.x + p.w / 2 + 150, p.y, { px: 10, align: 'left', color: sel ? '#be185d' : '#64748b' });
+    });
+    if (!cams.length) return;
+
+    cams.forEach(cam => {
+      const a = analyze(cam), sel = cam.id === selId;
+      const pd = (CB.getPlatformOf(cam) || { d: 1000 }).d;
+
+      ctx.save();
 
       if (a && showFov) {
         const { aim, sim } = a;
@@ -384,20 +447,45 @@
     });
   }
 
-  /** 立面: 選択カメラの台・本体と垂直画角の上端/下端レイ・角度表示。横軸=Y */
+  /** 立面: イントレ台と載っているカメラ本体、選択カメラの垂直画角の上端/下端レイ・角度表示。横軸=Y */
   function drawSide(ctx) {
-    const cam = CB.getSelected();
-    if (!cam) return;
-    const a = analyze(cam);
     const T = window.Core.drawText;
-    const platH = cam.platH || 0, platD = cam.platD || 1000, lensH = cam.lensH || 1650;
+    const cam = CB.getSelected();
+    const selPlatId = CB.getSelectedPlatformId();
     const DEG = 180 / Math.PI;
 
+    // イントレ台 (独立したオブジェクト)
+    CB.getPlatforms().forEach(p => {
+      const sel = p.id === selPlatId;
+      ctx.save();
+      ctx.fillStyle = sel ? 'rgba(236,72,153,0.55)' : 'rgba(148,163,184,0.45)';
+      ctx.strokeStyle = sel ? '#be185d' : '#64748b'; ctx.lineWidth = 20;
+      if (p.h > 0) { ctx.fillRect(p.y - p.d / 2, -p.h, p.d, p.h); ctx.strokeRect(p.y - p.d / 2, -p.h, p.d, p.h); }
+      else { ctx.beginPath(); ctx.moveTo(p.y - p.d / 2, 0); ctx.lineTo(p.y + p.d / 2, 0); ctx.stroke(); }
+      ctx.restore();
+      T(ctx, p.name + ' (H:' + Math.round(p.h) + ')', p.y, -p.h - 200, { px: 10, color: sel ? '#be185d' : '#64748b' });
+    });
+
+    // 選択中以外のカメラ: 三脚と本体だけ (画角線は描かない)
+    CB.getAll().forEach(c => {
+      if (cam && c.id === cam.id) return;
+      const p = CB.getPlatformOf(c), base = p ? p.h : 0, ca = analyze(c);
+      ctx.save();
+      ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 25;
+      ctx.beginPath(); ctx.moveTo(c.y, -base); ctx.lineTo(c.y, -c.lensH); ctx.stroke();
+      ctx.restore();
+      const tilt = ca ? Math.atan2(ca.aim.targetZ - c.lensH, Math.max(Math.hypot(ca.aim.targetX - c.x, ca.aim.targetY - c.y), 1)) : 0;
+      drawCameraSide(ctx, c.y, c.lensH, tilt, ca && Math.sin(ca.aim.hAngle) >= 0 ? 1 : -1, false);
+    });
+
+    if (!cam) return;
+    const a = analyze(cam);
+    const lensH = cam.lensH || 1650;
+    const camBase = (CB.getPlatformOf(cam) || { h: 0 }).h;
+
     ctx.save();
-    ctx.fillStyle = '#ec4899';
-    ctx.fillRect(cam.y - platD / 2, -platH, platD, platH);
     ctx.strokeStyle = '#64748b'; ctx.lineWidth = 30;
-    ctx.beginPath(); ctx.moveTo(cam.y, -platH); ctx.lineTo(cam.y, -lensH); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cam.y, -camBase); ctx.lineTo(cam.y, -lensH); ctx.stroke();
 
     if (!a) { drawCameraSide(ctx, cam.y, lensH, 0, -1, true); ctx.restore(); return; }
     const { aim, sim } = a;
@@ -464,33 +552,47 @@
 
   // ---------------------------------------------------------------- 当たり判定 / ドラッグ
   function hitTest(wx, wy, view) {
-    const cams = CB.getAll();
-    if (view === 'side') {                       // 立面: 選択中カメラのレンズ位置のみ。奥行き(Y)方向に動かせる
+    const cams = CB.getAll(), plats = CB.getPlatforms();
+    if (view === 'side') {                       // 立面: 選択中カメラのレンズ → 台。奥行き(Y)方向に動かせる
       const c = CB.getSelected();
-      if (c && Math.hypot(wx - c.y, wy - (c.lensH || 0)) < 400) return { id: c.id, offX: wx - c.y, offY: 0 };
+      if (c && Math.hypot(wx - c.y, wy - (c.lensH || 0)) < 400) return { type: 'camera', id: c.id, offX: wx - c.y, offY: 0 };
+      for (let i = plats.length - 1; i >= 0; i--) {
+        const p = plats[i];
+        if (Math.abs(wx - p.y) <= p.d / 2 && wy >= -100 && wy <= (p.h || 0) + 100) return { type: 'platform', id: p.id, offX: wx - p.y, offY: 0 };
+      }
       return null;
     }
-    for (let i = cams.length - 1; i >= 0; i--) {
-      const c = cams[i], pw = c.platW || 1000, pd = c.platD || 1000;
-      const onHead = Math.hypot(wx - c.x, wy - c.y) < 350;
-      const onPlat = Math.abs(wx - c.x) <= pw / 2 && Math.abs(wy - c.y) <= pd / 2;
-      if (onHead || onPlat) return { id: c.id, offX: wx - c.x, offY: wy - c.y };
+    for (let i = cams.length - 1; i >= 0; i--) {         // 平面: カメラ本体を先に判定 → なければ台
+      const c = cams[i];
+      if (Math.hypot(wx - c.x, wy - c.y) < 450) return { type: 'camera', id: c.id, offX: wx - c.x, offY: wy - c.y };
+    }
+    for (let i = plats.length - 1; i >= 0; i--) {
+      const p = plats[i];
+      if (Math.abs(wx - p.x) <= p.w / 2 && Math.abs(wy - p.y) <= p.d / 2) return { type: 'platform', id: p.id, offX: wx - p.x, offY: wy - p.y };
     }
     return null;
   }
 
   function onGrab(item) {
-    CB.setSelectedId(item.id);
+    if (item.type === 'platform') CB.setSelectedPlatformId(item.id);
+    else CB.setSelectedId(item.id);
     updateUI();
     window.Core.switchTab('camera');
     redraw();
   }
 
   function handleDrag(item, wx, wy, view) {
-    const c = CB.getById(item.id);
-    if (!c) return;
-    if (view === 'top') { c.x = Math.round(wx - item.offX); c.y = Math.round(wy - item.offY); }
-    else c.y = Math.round(wx - item.offX);
+    if (item.type === 'platform') {                       // 台を動かす → 載っているカメラも一緒に動く
+      const p = CB.getPlatformById(item.id);
+      if (!p) return;
+      if (view === 'top') CB.movePlatformTo(p, wx - item.offX, wy - item.offY);
+      else CB.movePlatformTo(p, p.x, wx - item.offX);
+    } else {                                              // カメラ: 台に載っていれば台の上だけで動く
+      const c = CB.getById(item.id);
+      if (!c) return;
+      if (view === 'top') CB.moveCameraTo(c, wx - item.offX, wy - item.offY);
+      else CB.moveCameraTo(c, c.x, wx - item.offX);
+    }
     updateUI(true);
   }
 

@@ -93,16 +93,18 @@ window.MeasureTool = (function () {
         [st.y, st.y + st.d].forEach(y => { add(y, 0, 'stage'); add(y, st.h || 0, 'stage'); });
       }
     }
-    (window.CameraBase && window.CameraBase.getAll ? window.CameraBase.getAll() : []).forEach(c => {
-      const pw = Number.isFinite(c.platW) ? c.platW : 1000, pd = Number.isFinite(c.platD) ? c.platD : 1000;
+    const CB = window.CameraBase;
+    (CB && CB.getPlatforms ? CB.getPlatforms() : []).forEach(p => {          // イントレ台
       if (top) {
-        add(c.x, c.y, 'camera');
-        [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(k => add(c.x + k[0] * pw / 2, c.y + k[1] * pd / 2, 'camera'));
+        add(p.x, p.y, 'camera');
+        [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(k => add(p.x + k[0] * p.w / 2, p.y + k[1] * p.d / 2, 'camera'));
       } else {
-        add(c.y, c.lensH, 'camera');                 // レンズ
-        add(c.y, c.platH || 0, 'camera');            // 台の上面
-        add(c.y, 0, 'camera');                       // 床
+        [p.y - p.d / 2, p.y + p.d / 2].forEach(y => { add(y, 0, 'camera'); add(y, p.h || 0, 'camera'); });
       }
+    });
+    (CB && CB.getAll ? CB.getAll() : []).forEach(c => {                       // カメラ (レンズ位置)
+      if (top) add(c.x, c.y, 'camera');
+      else { add(c.y, c.lensH, 'camera'); add(c.y, 0, 'camera'); }
     });
     const gm = window.tabGuestsModule;
     const guests = gm && Array.isArray(gm.list) ? gm.list : [];

@@ -444,7 +444,8 @@
   function drawTop(ctx) {
     if (!window.seats.length) return;
     const cw = window.chair.w, cd = window.chair.d;
-    const blocked = window.displaySettings.showSeatStatus ? blockedIds() : new Set();
+    const status = !!window.displaySettings.showSeatStatus;
+    const blocked = status ? blockedIds() : new Set();
 
     window.seats.forEach(s => {
       const sel = selectedIds.has(s.id), bad = blocked.has(s.id);
@@ -453,11 +454,12 @@
       ctx.rotate((s.angle || 0) * Math.PI / 180);
       if (sel) { ctx.fillStyle = 'rgba(37,99,235,0.18)'; ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 12; }
       else if (bad) { ctx.fillStyle = 'rgba(220,38,38,0.15)'; ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 8; }
-      else { ctx.fillStyle = '#f8fafc'; ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 6; }
+      else if (status) { ctx.fillStyle = '#dcfce7'; ctx.strokeStyle = '#16a34a'; ctx.lineWidth = 8; }          // 視界OK = 緑
+      else { ctx.fillStyle = '#f5ede0'; ctx.strokeStyle = '#a8896c'; ctx.lineWidth = 6; }                       // 判定OFF = 暖色
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(-cw / 2, -cd / 2, cw, cd, 60); else ctx.rect(-cw / 2, -cd / 2, cw, cd);
       ctx.fill(); ctx.stroke();
-      ctx.fillStyle = sel ? '#3b82f6' : (bad ? '#ef4444' : '#cbd5e1');   // 背もたれ
+      ctx.fillStyle = sel ? '#3b82f6' : (bad ? '#ef4444' : (status ? '#4ade80' : '#d6c3a8'));   // 背もたれ
       ctx.fillRect(-cw / 2, cd / 2 - 40, cw, 40);
       ctx.strokeRect(-cw / 2, cd / 2 - 40, cw, 40);
       ctx.restore();
@@ -509,7 +511,7 @@
     ctx.save();
     list.sort((a, b) => (a.bad - b.bad)).forEach(g => {            // 赤を最前面に
       const py = g.y, bz = g.bz;
-      const col = g.bad ? '#dc2626' : (g.sel ? '#2563eb' : '#475569');
+      const col = g.bad ? '#dc2626' : (g.sel ? '#2563eb' : '#15803d');
       ctx.strokeStyle = col; ctx.lineWidth = g.bad ? 35 : 25;
       ctx.strokeRect(py - cd / 2, -bz - ch, cd, 30);                   // 座面
       ctx.beginPath();
@@ -517,7 +519,7 @@
       ctx.moveTo(py + cd / 2 - 40, -bz - ch); ctx.lineTo(py + cd / 2 - 40, -bz);
       ctx.moveTo(py + cd / 2 - 40, -bz - ch); ctx.lineTo(py + cd / 2 - 40, -bz - ch - cb);   // 背もたれ
       ctx.stroke();
-      ctx.fillStyle = g.bad ? '#dc2626' : (g.sel ? '#2563eb' : '#334155');
+      ctx.fillStyle = g.bad ? '#dc2626' : (g.sel ? '#2563eb' : '#166534');
       drawSeatedPerson(ctx, py, bz + ch, torso);
     });
 

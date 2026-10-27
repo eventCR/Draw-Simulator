@@ -143,6 +143,8 @@ body {
 .sym-podium  { border: 1.5px solid #16a34a; background: #f0fdf4; }
 .sym-monitor { border: 1.5px solid #0284c7; background: #e0f2fe; }
 .sym-cam     { border: 2px solid #a855f7; background: #a855f7; border-radius: 50%; }
+.sym-seat    { border: 2px solid #16a34a; background: #dcfce7; }
+.sym-seat-bad { border: 2px solid #dc2626; background: #fee2e2; }
 
 #side-scrollbar-container {
   position: fixed; top: 60px; left: calc(50% - 100px); transform: translateX(-50%);
