@@ -696,7 +696,7 @@
     c.fillStyle = o.color || '#475569';
     c.beginPath(); c.arc(cy, -(baseZ + h - headR), headR, 0, Math.PI * 2); c.fill();   // 頭
     c.fillRect(cy - bw / 2, -(baseZ + shZ), bw, shZ - hipZ);                           // 胴
-    c.fillRect(cy - bw * 0.35, -baseZ, bw * 0.7, hipZ);                                // 脚
+    c.fillRect(cy - bw * 0.35, -(baseZ + hipZ), bw * 0.7, hipZ);                       // 脚 (足元 baseZ から腰まで上向き)
     c.restore();
   }
 

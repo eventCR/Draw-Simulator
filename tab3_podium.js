@@ -169,6 +169,9 @@
       if (!p.enabled) return;
       if (fov && fov.podiumIds && !fov.podiumIds.has(p.id)) return;
       const col = colorOf(p), bz = baseZOf(p);
+      if (p.hasHost) {                       // 司会者は演台の後ろ (ステージ奥側) に立つ。先に描いて演台を手前に重ねる
+        window.Core.drawPersonSide(ctx, p.y - p.d / 2 - 100, bz, 1600, { color: col, alpha: 0.85 });
+      }
       ctx.save();
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
       ctx.fillRect(p.y - p.d / 2, -bz - p.h, p.d, p.h);
@@ -176,9 +179,6 @@
       ctx.lineWidth = 30;
       ctx.strokeRect(p.y - p.d / 2, -bz - p.h, p.d, p.h);
       ctx.restore();
-      if (p.hasHost) {
-        window.Core.drawPersonSide(ctx, p.y - p.d / 2 - 250, bz, 1600, { color: col, alpha: 0.85 });
-      }
       T(ctx, p.name, p.y, -bz - p.h - 150, { px: 10, bold: true, color: col });
     });
   }

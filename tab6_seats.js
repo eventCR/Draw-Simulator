@@ -138,6 +138,7 @@
             </select></div>
         </div>
         <div class="hint">席幅・席隙間・通路幅・列ピッチ・席数などを変えても、個別に動かした席・角度・削除した席は保たれます。すべてやり直したいときだけ下のボタンを押してください。</div>
+        <div class="hint">※「1席おき」「市松」では、席隙間は残った席どうしの隙間です。構成(X)の数は席の位置の数で、実際の席数は約半分になります。</div>
         <div class="hint" id="gridRowSummary"></div>
         <button class="btn-action btn-accent" id="btnRebuildSeats">🔄 完全に再配置 (個別編集をすべてリセット)</button>
       </div>
@@ -264,7 +265,11 @@
   /** 設定から全席の位置を計算する (配置は変えない。再配置と列ごとの席数表示で共用) */
   function generateSeats(g) {
     const r = window.room, st = window.stage, ch = window.chair;
-    const pitch = ch.w + g.seatGapX;
+    // 1席おき・市松は席を間引くので、「席隙間」は残った席どうしの見た目の隙間として扱う:
+    // 残った席の中心距離 = 席幅 + 席隙間 → 位置(スロット)の間隔はその半分
+    const thin = g.mode === 'skip' || g.mode === 'checker';
+    const pitch = thin ? (ch.w + g.seatGapX) / 2 : ch.w + g.seatGapX;
+    const aisleW = thin ? g.aisleW + Math.max(0, ch.w - pitch) : g.aisleW;      // 端の席がスロットからはみ出す分を通路に足す
     let blocks = String(g.blockCols).split(',').map(n => parseInt(n.trim(), 10) || 0).filter(n => n > 0);
     if (!blocks.length) blocks = [8];
     const startY = st.y + st.d + g.stageDist;
@@ -272,7 +277,7 @@
     for (let row = 0; row < g.rows; row++) {
       const counts = blocks.slice();
       if (g.growBy && row + 1 >= g.growFrom) distribute(counts, g.growBy * (row + 1 - g.growFrom + 1), g.growTarget);
-      const total = counts.reduce((a, n) => a + n * pitch, 0) + g.aisleW * (counts.length - 1);
+      const total = counts.reduce((a, n) => a + n * pitch, 0) + aisleW * (counts.length - 1);
       let curX = (r.w - total) / 2 + (g.mode === 'stagger' && row % 2 === 1 ? pitch / 2 : 0);
       let pos = 0, n = 1;
       counts.forEach((count, bi) => {
@@ -281,7 +286,7 @@
           if (keep) { out.push({ id: 'R' + (row + 1) + '-S' + n, row: row + 1, slot: 'r' + (row + 1) + 'b' + bi + 'i' + c, x: Math.round(curX + pitch / 2), y: Math.round(startY + row * g.rowPitch), angle: 0 }); n++; }
           curX += pitch;
         }
-        curX += g.aisleW;
+        curX += aisleW;
       });
     }
     return out;
