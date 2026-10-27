@@ -27,7 +27,8 @@
   window.totalHeadZ = window.chair.h + window.audienceTorsoH;
 
   const grid = {
-    rows: 5, rowPitch: 950, blockCols: '5,10,5', seatGapX: 20, aisleW: 1000, stageDist: 2500,
+    // すべて「脚の外側」から測る: rowGap=前列の後ろ脚→次列の前脚 / seatGapX=右脚→隣の左脚 / stageDist=ステージ前縁→最前列の前脚
+    rows: 5, rowGap: 450, blockCols: '5,10,5', seatGapX: 20, aisleW: 1000, stageDist: 2250, legBased: true,
     mode: 'normal',          // normal 標準 / stagger 千鳥(1列おきに半席ずらす) / skip 1席おき / checker 市松(1席おき+列ごとに交互)
     growFrom: 4,             // 何列目から増減させるか
     growBy: 0,               // その列から 1列ごとに何席ずつ増減するか (0=なし / 負=減らす)
@@ -103,20 +104,20 @@
           <button class="btn-action btn-green" id="btnAlignLine" style="flex:1">📏 選択席を1直線に整列</button>
           <button class="btn-action btn-blue" id="btnAimCenter" style="flex:1">🎯 ステージ中央に向ける</button>
         </div>
-        <button class="btn-action btn-amber" id="btnSnapY">📌 選択席のY(奥行)を列ピッチにスナップ</button>
+        <button class="btn-action btn-amber" id="btnSnapY">📌 選択席のY(奥行)を列の位置にスナップ</button>
       </div>
 
       <div class="ui-group">
         <div class="ui-group-title"><span>グリッド整列</span><span class="badge" id="seatCountBadge">0 席</span></div>
         <div class="ui-row">
           <div class="input-box"><label>行数(Y)</label><input type="number" id="gridRows" min="1"></div>
-          <div class="input-box"><label>列ピッチ(Y)</label><input type="number" id="gridRowPitch" step="50"></div>
+          <div class="input-box"><label title="前列の後ろ脚 → 次列の前脚">列間隔(Y)<br><small>後脚→次列の前脚</small></label><input type="number" id="gridRowGap" step="50"></div>
           <div class="input-box"><label>構成(X)</label><input type="text" id="gridBlockCols" placeholder="例: 5,10,5"></div>
         </div>
         <div class="ui-row">
-          <div class="input-box"><label>席隙間(X)</label><input type="number" id="gridSeatGapX" step="10"></div>
+          <div class="input-box"><label title="右脚 → 隣の席の左脚">席隙間(X)<br><small>右脚→左脚</small></label><input type="number" id="gridSeatGapX" step="10"></div>
           <div class="input-box"><label>通路幅</label><input type="number" id="gridAisleW" step="100"></div>
-          <div class="input-box"><label>ステージ離隔(Y)</label><input type="number" id="gridStageDist" step="100"></div>
+          <div class="input-box"><label title="ステージ前縁 → 最前列の前脚">ステージ離隔(Y)<br><small>前縁→最前列の前脚</small></label><input type="number" id="gridStageDist" step="100"></div>
         </div>
         <div class="ui-row">
           <div class="input-box"><label>配置方式</label>
@@ -137,7 +138,7 @@
               <option value="all">全ブロック</option>
             </select></div>
         </div>
-        <div class="hint">席幅・席隙間・通路幅・列ピッチ・席数などを変えても、個別に動かした席・角度・削除した席は保たれます。すべてやり直したいときだけ下のボタンを押してください。</div>
+        <div class="hint">席幅・席隙間・通路幅・列間隔・席数などを変えても、個別に動かした席・角度・削除した席は保たれます。すべてやり直したいときだけ下のボタンを押してください。</div>
         <div class="hint">※「1席おき」「市松」では、席隙間は残った席どうしの隙間です。構成(X)の数は席の位置の数で、実際の席数は約半分になります。</div>
         <div class="hint" id="gridRowSummary"></div>
         <button class="btn-action btn-accent" id="btnRebuildSeats">🔄 完全に再配置 (個別編集をすべてリセット)</button>
@@ -184,7 +185,7 @@
     });
 
     // グリッド入力: 変更 → 読み取り → 再配置
-    const gridIds = { gridRows: 'rows', gridRowPitch: 'rowPitch', gridBlockCols: 'blockCols', gridSeatGapX: 'seatGapX', gridAisleW: 'aisleW', gridStageDist: 'stageDist' };
+    const gridIds = { gridRows: 'rows', gridRowGap: 'rowGap', gridBlockCols: 'blockCols', gridSeatGapX: 'seatGapX', gridAisleW: 'aisleW', gridStageDist: 'stageDist' };
     Object.keys(gridIds).forEach(id => $(id).addEventListener('change', () => { readGrid(); relayoutSeats('客席設定'); }));
     $('btnRebuildSeats').addEventListener('click', () => { readGrid(); rebuildSeats(); });
     ['gridMode', 'gridGrowFrom', 'gridGrowBy', 'gridGrowTarget'].forEach(id => $(id).addEventListener('change', () => { readGrid(); relayoutSeats('客席設定'); }));
@@ -206,11 +207,11 @@
 
   function readGrid() {
     grid.rows = Math.max(1, Math.round(num('gridRows', 5)));
-    grid.rowPitch = Math.max(100, num('gridRowPitch', 950));
+    grid.rowGap = Math.max(0, num('gridRowGap', 450));
     grid.blockCols = $('gridBlockCols').value || '5,10,5';
     grid.seatGapX = Math.max(0, num('gridSeatGapX', 20));
     grid.aisleW = Math.max(0, num('gridAisleW', 1000));
-    grid.stageDist = num('gridStageDist', 2500);
+    grid.stageDist = num('gridStageDist', 2250);
     grid.mode = $('gridMode').value || 'normal';
     grid.growFrom = Math.max(1, Math.round(num('gridGrowFrom', 4)));
     grid.growBy = Math.round(num('gridGrowBy', 0));
@@ -223,7 +224,7 @@
     $('chairW').value = c.w; $('chairD').value = c.d; $('chairH').value = c.h; $('chairBackH').value = c.backH;
     $('audienceTorsoH').value = Math.round(window.audienceTorsoH);
     $('totalHeadZ').value = Math.round(window.totalHeadZ);
-    $('gridRows').value = grid.rows; $('gridRowPitch').value = grid.rowPitch; $('gridBlockCols').value = grid.blockCols;
+    $('gridRows').value = grid.rows; $('gridRowGap').value = grid.rowGap; $('gridBlockCols').value = grid.blockCols;
     $('gridSeatGapX').value = grid.seatGapX; $('gridAisleW').value = grid.aisleW; $('gridStageDist').value = grid.stageDist;
     $('gridMode').value = grid.mode; $('gridGrowFrom').value = grid.growFrom; $('gridGrowBy').value = grid.growBy; $('gridGrowTarget').value = grid.growTarget;
     $('seatCountBadge').innerText = window.seats.length + ' 席';
@@ -262,6 +263,21 @@
     }
   }
 
+  /** 列の中心間距離 = 椅子の奥行(前脚→後ろ脚) + 列間隔(後ろ脚→次列の前脚) */
+  function rowStep(g) { return window.chair.d + g.rowGap; }
+  /** 最前列の中心Y = ステージ前縁 + 離隔(→前脚) + 椅子奥行の半分 */
+  function firstRowY(g) { const st = window.stage; return st.y + st.d + g.stageDist + window.chair.d / 2; }
+  /** 旧形式 (列ピッチ=中心間 / 離隔=最前列の中心まで) の設定を、脚基準の新形式へ変換 */
+  function upgradeGrid(g) {
+    if (!g || g.legBased) return g;
+    const d = window.chair.d;
+    if (g.rowPitch != null) g.rowGap = Math.max(0, g.rowPitch - d);
+    delete g.rowPitch;
+    if (g.stageDist != null) g.stageDist = Math.max(0, g.stageDist - d / 2);
+    g.legBased = true;
+    return g;
+  }
+
   /** 設定から全席の位置を計算する (配置は変えない。再配置と列ごとの席数表示で共用) */
   function generateSeats(g) {
     const r = window.room, st = window.stage, ch = window.chair;
@@ -272,7 +288,7 @@
     const aisleW = thin ? g.aisleW + Math.max(0, ch.w - pitch) : g.aisleW;      // 端の席がスロットからはみ出す分を通路に足す
     let blocks = String(g.blockCols).split(',').map(n => parseInt(n.trim(), 10) || 0).filter(n => n > 0);
     if (!blocks.length) blocks = [8];
-    const startY = st.y + st.d + g.stageDist;
+    const startY = firstRowY(g);
     const out = [];
     for (let row = 0; row < g.rows; row++) {
       const counts = blocks.slice();
@@ -283,7 +299,7 @@
       counts.forEach((count, bi) => {
         for (let c = 0; c < count; c++, pos++) {
           const keep = g.mode === 'skip' ? pos % 2 === 0 : (g.mode === 'checker' ? (pos + row) % 2 === 0 : true);
-          if (keep) { out.push({ id: 'R' + (row + 1) + '-S' + n, row: row + 1, slot: 'r' + (row + 1) + 'b' + bi + 'i' + c, x: Math.round(curX + pitch / 2), y: Math.round(startY + row * g.rowPitch), angle: 0 }); n++; }
+          if (keep) { out.push({ id: 'R' + (row + 1) + '-S' + n, row: row + 1, slot: 'r' + (row + 1) + 'b' + bi + 'i' + c, x: Math.round(curX + pitch / 2), y: Math.round(startY + row * rowStep(g)), angle: 0 }); n++; }
           curX += pitch;
         }
         curX += aisleW;
@@ -425,10 +441,10 @@
   function snapToRows() {
     const sel = selectedSeats();
     if (!sel.length) { window.debugBox && window.debugBox.warn('スナップする席を選択してください'); return; }
-    const st = window.stage, startY = st.y + st.d + grid.stageDist;
+    const startY = firstRowY(grid), step = rowStep(grid);
     sel.forEach(s => {
-      const idx = Math.round((s.y - startY) / grid.rowPitch);
-      s.y = startY + idx * grid.rowPitch;
+      const idx = Math.round((s.y - startY) / step);
+      s.y = startY + idx * step;
       s.row = idx + 1;
     });
     redraw(); commit('列にスナップ');
@@ -644,8 +660,8 @@
     if (d.chair) window.chair = Object.assign({ w: 500, d: 500, h: 420, backH: 400 }, clone(d.chair));
     if (typeof d.audienceTorsoH === 'number') window.audienceTorsoH = d.audienceTorsoH;
     else if (typeof d.totalHeadZ === 'number') window.audienceTorsoH = Math.max(300, d.totalHeadZ - window.chair.h);   // 旧形式
-    if (d.grid) Object.assign(grid, clone(d.grid));
-    if (Array.isArray(d.patterns)) myPatterns = clone(d.patterns);
+    if (d.grid) Object.assign(grid, upgradeGrid(clone(d.grid)));
+    if (Array.isArray(d.patterns)) myPatterns = clone(d.patterns).map(p => { upgradeGrid(p.grid); return p; });
     deletedSlots = new Set(Array.isArray(d.deletedSlots) ? d.deletedSlots : []);
     adoptLegacySeats();
     updateHeadZ();
@@ -674,7 +690,8 @@
     configureGrid(cfg) {
       if (!cfg) return;
       if (cfg.rows) grid.rows = Math.max(1, Math.round(cfg.rows));
-      if (cfg.rowPitch) grid.rowPitch = cfg.rowPitch;
+      if (cfg.rowGap != null) grid.rowGap = Math.max(0, cfg.rowGap);
+      else if (cfg.rowPitch) grid.rowGap = Math.max(0, cfg.rowPitch - window.chair.d);     // 旧形式 (中心間ピッチ) の入力
       if (cfg.blockCols) grid.blockCols = String(cfg.blockCols);
       if (cfg.seatGapX != null) grid.seatGapX = cfg.seatGapX;
       if (cfg.aisleW) grid.aisleW = cfg.aisleW;
