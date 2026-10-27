@@ -218,6 +218,8 @@
     syncUI();
   }
 
-  window.tabPodiumModule = { init: buildUI, drawTop, drawSide, hitTest, onGrab, handleDrag, exportData, importData, syncUI };
+  window.tabPodiumModule = { init: buildUI, drawTop, drawSide, hitTest, onGrab, handleDrag, exportData, importData, syncUI,
+    /** 立面の高さ範囲 [下, 上] mm (司会者の立ち姿を含む) */
+    getZRange: (p) => { const bz = baseZOf(p); return [bz, bz + Math.max(p.h || 0, p.hasHost ? 1600 : 0)]; } };
   window.Core.register('podium', window.tabPodiumModule, { order: 50 });
 })();

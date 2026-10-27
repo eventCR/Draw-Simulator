@@ -264,7 +264,9 @@
 
   function drawSide(ctx) {
     const T = window.Core.drawText;
+    const fov = (window.tabCameraModule && window.tabCameraModule.getFovSelection) ? window.tabCameraModule.getFovSelection() : null;
     window.monitors.forEach((m, idx) => {
+      if (fov && !fov.monitorIds.has(m.id) && m.id !== selectedId) return;
       const sel = m.id === selectedId, bz = baseZ(m), bD = m.baseD, mH = m.h, f = facing(m), low = m.stand === 'low';
       const ch = centerH(m);
       const tilt = (m.tilt || 0) * Math.PI / 180;
@@ -334,7 +336,8 @@
     syncUI();
   }
 
-  window.tabMonitorModule = { init: buildUI, drawTop, drawSide, hitTest, onGrab, handleDrag, exportData, importData, syncUI, updateSimulation };
+  window.tabMonitorModule = { init: buildUI, drawTop, drawSide, hitTest, onGrab, handleDrag, exportData, importData, syncUI, updateSimulation,
+    getZRange: (m) => [baseZ(m), baseZ(m) + centerH(m) + (m.h || 0) / 2] };
   window.Core.register('monitor', window.tabMonitorModule, { order: 70 });
   window.Core.on('commit', updateSimulation);          // 登壇者・客席の変更後に視認ログを更新
 })();

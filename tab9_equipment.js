@@ -1,9 +1,11 @@
 /**
  * ==============================================================================
- * tab9_equipment.js — 【機材・備品】オペ卓 / 制作物 / 照明スタンド
+ * tab9_equipment.js — 【機材・備品】オペ卓 / 制作物 / 照明スタンド / スピーカー
  *
  * 所有する共有データ: window.equipments[] , window.selectedEquipId
- *   { id, type:'ope'|'custom'|'light', name, x, y, angle, w, d, h, hasChairs?, shape? }
+ *   { id, type:'ope'|'custom'|'light'|'speaker', name, x, y, angle, w, d, h, hasChairs?, shape? }
+ *   speaker: shape:'rect'|'trapezoid', backW (台形の奥側の幅), mountH (底面の高さ=スタンド高)。
+ *            角度0のとき、広い面(正面)が +Y (客席側) を向く。
  * 旧版では描画・クリック判定がコアに接続されておらず表示されなかったが、
  * 今回は Core.register で正式に接続している。
  * ==============================================================================
@@ -16,7 +18,7 @@
   const commit = (l) => window.Core.commit(l);
   const redraw = () => window.Core.requestRender();
 
-  const TYPE_LABEL = { ope: 'オペ卓', custom: '制作物', light: '照明' };
+  const TYPE_LABEL = { ope: 'オペ卓', custom: '制作物', light: '照明', speaker: 'スピーカー' };
 
   window.equipments = [];
   window.selectedEquipId = null;
@@ -39,11 +41,12 @@
     panel.innerHTML = `
       <div class="ui-group">
         <div class="ui-group-title">
-          <span>🛠 機材・備品 (オペ卓/制作物/照明)</span>
+          <span>🛠 機材・備品 (オペ卓/制作物/照明/スピーカー)</span>
           <span class="btn-cluster">
             <button class="btn-action sm" id="btnAddOpe">＋ オペ卓</button>
             <button class="btn-action sm" id="btnAddCustom">＋ 制作物</button>
             <button class="btn-action sm" id="btnAddLight">＋ 照明</button>
+            <button class="btn-action sm" id="btnAddSpeaker">＋ スピーカー</button>
             <button class="btn-action sm btn-danger" id="btnDelEquip">削除</button>
           </span>
         </div>
@@ -68,18 +71,27 @@
             <select id="equipShape"><option value="rect">四角形</option><option value="circle">丸 (円形・楕円)</option><option value="triangle">三角形</option></select>
           </div>
         </div>
+        <div class="ui-row hidden" id="equipSpeakerBox">
+          <div class="input-box"><label>形状 (平面図)</label>
+            <select id="spkShape"><option value="trapezoid">台形 (正面が広い)</option><option value="rect">四角形</option></select>
+          </div>
+          <div class="input-box"><label>奥側の幅 (mm)</label><input type="number" id="spkBackW" step="50"></div>
+          <div class="input-box"><label>底面の高さ (mm)</label><input type="number" id="spkMountH" step="100"></div>
+        </div>
+        <div class="hint hidden" id="equipSpeakerHint">※W=正面の幅 / D=奥行 / H=箱の高さ。角度0で正面(広い面)が客席側を向きます。底面の高さはスタンドの高さ (0=床置き)。</div>
         <div class="hint hidden" id="equipLightBox">※照明スタンド型。W・Dは三脚のフットプリント (推奨800角)、Hはスタンド高さ。画角の描画は行いません。</div>
       </div>`;
     bind();
     syncUI();
   }
 
-  const FIELDS = ['equipName', 'equipX', 'equipY', 'equipAngle', 'equipW', 'equipD', 'equipH', 'equipShape', 'equipHasChairs'];
+  const FIELDS = ['equipName', 'equipX', 'equipY', 'equipAngle', 'equipW', 'equipD', 'equipH', 'equipShape', 'equipHasChairs', 'spkShape', 'spkBackW', 'spkMountH'];
 
   function bind() {
     $('btnAddOpe').addEventListener('click', () => addEquip('ope'));
     $('btnAddCustom').addEventListener('click', () => addEquip('custom'));
     $('btnAddLight').addEventListener('click', () => addEquip('light'));
+    $('btnAddSpeaker').addEventListener('click', () => addEquip('speaker'));
     $('btnDelEquip').addEventListener('click', () => {
       if (!selected()) return;
       window.equipments = window.equipments.filter(e => e.id !== window.selectedEquipId);
@@ -100,6 +112,11 @@
       eq.h = Math.max(50, num('equipH', 100));
       if (eq.type === 'ope') eq.hasChairs = $('equipHasChairs').checked;
       if (eq.type === 'custom') eq.shape = $('equipShape').value;
+      if (eq.type === 'speaker') {
+        eq.shape = $('spkShape').value;
+        eq.backW = Math.max(50, Math.min(eq.w, num('spkBackW', eq.backW || eq.w * 0.5)));
+        eq.mountH = Math.max(0, num('spkMountH', 0));
+      }
       syncUI(); redraw(); commit('機材変更');
     }));
   }
@@ -110,6 +127,11 @@
     const eq = { id, type, x: Math.round(window.room.w / 2), y: Math.round(st.y + st.d + 1500), angle: 0 };
     if (type === 'ope') Object.assign(eq, { name: 'オペ卓 ' + n, w: 1800, d: 600, h: 700, hasChairs: true });
     else if (type === 'custom') Object.assign(eq, { name: '展示台 ' + n, w: 900, d: 900, h: 1000, shape: 'rect' });
+    else if (type === 'speaker') {
+      const sx = Math.max(500, Math.round(st.x - 700));
+      Object.assign(eq, { name: 'スピーカー ' + n, w: 600, d: 500, h: 900, shape: 'trapezoid', backW: 300, mountH: 0,
+        x: sx, y: Math.round(st.y + st.d - 300) });
+    }
     else Object.assign(eq, { name: '照明（スタンド） ' + n, w: 800, d: 800, h: 2000 });
     window.equipments.push(eq);
     window.selectedEquipId = id;
@@ -132,6 +154,8 @@
     $('equipOpeBox').classList.toggle('hidden', !eq || eq.type !== 'ope');
     $('equipCustomBox').classList.toggle('hidden', !eq || eq.type !== 'custom');
     $('equipLightBox').classList.toggle('hidden', !eq || eq.type !== 'light');
+    $('equipSpeakerBox').classList.toggle('hidden', !eq || eq.type !== 'speaker');
+    $('equipSpeakerHint').classList.toggle('hidden', !eq || eq.type !== 'speaker');
     if (!eq) {
       FIELDS.forEach(id => { if ($(id).tagName === 'INPUT' && $(id).type !== 'checkbox') $(id).value = ''; });
       $('equipTypeDisplay').value = '機材なし';
@@ -143,6 +167,12 @@
     $('equipW').value = eq.w; $('equipD').value = eq.d; $('equipH').value = eq.h;
     if (eq.type === 'ope') $('equipHasChairs').checked = !!eq.hasChairs;
     if (eq.type === 'custom') $('equipShape').value = eq.shape || 'rect';
+    if (eq.type === 'speaker') {
+      $('spkShape').value = eq.shape === 'rect' ? 'rect' : 'trapezoid';
+      $('spkBackW').value = Math.round(eq.backW || eq.w * 0.5);
+      $('spkMountH').value = eq.mountH || 0;
+      $('spkBackW').disabled = eq.shape === 'rect';
+    }
   }
 
   // ---------------------------------------------------------------- 描画
@@ -177,6 +207,16 @@
         } else {
           ctx.fillRect(-eq.w / 2, -eq.d / 2, eq.w, eq.d); ctx.strokeRect(-eq.w / 2, -eq.d / 2, eq.w, eq.d);
         }
+      } else if (eq.type === 'speaker') {
+        const trap = eq.shape !== 'rect', bw = trap ? Math.min(eq.w, eq.backW || eq.w * 0.5) : eq.w, hw = eq.w / 2, hd = eq.d / 2;
+        ctx.fillStyle = sel ? '#c7d2fe' : '#e2e8f0';
+        ctx.beginPath();
+        ctx.moveTo(-hw, hd); ctx.lineTo(hw, hd); ctx.lineTo(bw / 2, -hd); ctx.lineTo(-bw / 2, -hd); ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = sel ? '#1d4ed8' : '#0f172a'; ctx.lineWidth = 50;                  // 正面 (音の出る面)
+        ctx.beginPath(); ctx.moveTo(-hw, hd); ctx.lineTo(hw, hd); ctx.stroke();
+        ctx.strokeStyle = sel ? '#2563eb' : '#64748b'; ctx.lineWidth = 18;                  // 音の広がり
+        [0.55, 0.85].forEach(k => { ctx.beginPath(); ctx.arc(0, hd - eq.d * 0.15, eq.w * k * 0.7 + 150, Math.PI * 0.18, Math.PI * 0.82); ctx.stroke(); });
       } else {                                       // 照明: 三脚 + ヘッド
         const r = Math.min(eq.w, eq.d) / 2;
         ctx.beginPath();
@@ -192,7 +232,9 @@
 
   function drawSide(ctx) {
     const T = window.Core.drawText;
+    const fov = (window.tabCameraModule && window.tabCameraModule.getFovSelection) ? window.tabCameraModule.getFovSelection() : null;
     window.equipments.forEach(eq => {
+      if (fov && !fov.equipIds.has(eq.id) && eq.id !== window.selectedEquipId) return;      // 画角外は描かない (選択中は残す)
       const sel = eq.id === window.selectedEquipId, bz = baseZ(eq), sp = spans(eq);
       ctx.save();
       ctx.strokeStyle = sel ? '#2563eb' : '#475569';
@@ -201,6 +243,18 @@
         ctx.beginPath(); ctx.moveTo(eq.y, -bz); ctx.lineTo(eq.y, -bz - eq.h + 50); ctx.lineWidth = 15; ctx.stroke();
         ctx.fillStyle = sel ? '#fde047' : '#ffffff';
         ctx.fillRect(eq.y - 100, -bz - eq.h, 200, 100); ctx.strokeRect(eq.y - 100, -bz - eq.h, 200, 100);
+      } else if (eq.type === 'speaker') {
+        const mh = eq.mountH || 0;
+        if (mh > 0) {                                                   // スタンド
+          ctx.beginPath(); ctx.moveTo(eq.y, -bz); ctx.lineTo(eq.y, -bz - mh); ctx.lineWidth = 18; ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(eq.y - 250, -bz); ctx.lineTo(eq.y + 250, -bz); ctx.stroke();
+        }
+        ctx.lineWidth = 20;
+        ctx.fillStyle = sel ? '#c7d2fe' : '#e2e8f0';
+        ctx.fillRect(eq.y - sp.y, -bz - mh - eq.h, sp.y * 2, eq.h);
+        ctx.strokeRect(eq.y - sp.y, -bz - mh - eq.h, sp.y * 2, eq.h);
+        ctx.beginPath(); ctx.arc(eq.y, -bz - mh - eq.h * 0.7, Math.min(sp.y, eq.h) * 0.25, 0, Math.PI * 2); ctx.stroke();   // ツイーター
+        ctx.beginPath(); ctx.arc(eq.y, -bz - mh - eq.h * 0.3, Math.min(sp.y, eq.h) * 0.4, 0, Math.PI * 2); ctx.stroke();    // ウーファー
       } else {
         ctx.fillStyle = eq.type === 'ope' ? (sel ? '#bfdbfe' : '#f1f5f9') : (sel ? '#fef08a' : '#fef9c3');
         ctx.fillRect(eq.y - sp.y, -bz - eq.h, sp.y * 2, eq.h);
@@ -212,7 +266,7 @@
         }
       }
       ctx.restore();
-      T(ctx, eq.name + ' (H:' + eq.h + ')', eq.y, -bz - eq.h - 120, { px: 10, bold: true });
+      T(ctx, eq.name + ' (H:' + eq.h + ')', eq.y, -bz - (eq.type === 'speaker' ? (eq.mountH || 0) : 0) - eq.h - 120, { px: 10, bold: true });
     });
   }
 
@@ -225,8 +279,8 @@
         const rx = dx * Math.cos(a) - dy * Math.sin(a), ry = dx * Math.sin(a) + dy * Math.cos(a);
         if (Math.abs(rx) <= eq.w / 2 && Math.abs(ry) <= eq.d / 2) return { id: eq.id, offX: eq.x - wx, offY: eq.y - wy };
       } else {
-        const bz = baseZ(eq), sy = eq.type === 'light' ? 200 : spans(eq).y;
-        if (Math.abs(wx - eq.y) <= sy && wy >= bz && wy <= bz + eq.h) return { id: eq.id, offX: eq.y - wx, offY: 0 };
+        const bz = baseZ(eq), sy = eq.type === 'light' ? 200 : spans(eq).y, top = bz + eq.h + (eq.type === 'speaker' ? (eq.mountH || 0) : 0);
+        if (Math.abs(wx - eq.y) <= sy && wy >= bz && wy <= top) return { id: eq.id, offX: eq.y - wx, offY: 0 };
       }
     }
     return null;
@@ -253,6 +307,7 @@
     syncUI();
   }
 
-  window.tabEquipmentModule = { init: buildUI, drawTop, drawSide, hitTest, onGrab, handleDrag, exportData, importData, syncUI };
+  window.tabEquipmentModule = { init: buildUI, drawTop, drawSide, hitTest, onGrab, handleDrag, exportData, importData, syncUI,
+    getZRange: (eq) => { const bz = baseZ(eq) + (eq.type === 'speaker' ? (eq.mountH || 0) : 0); return [baseZ(eq), bz + eq.h]; } };
   window.Core.register('equipment', window.tabEquipmentModule, { order: 55 });
 })();

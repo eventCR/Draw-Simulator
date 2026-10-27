@@ -193,7 +193,9 @@
 
   function drawSide(ctx) {
     const T = window.Core.drawText;
+    const fov = (window.tabCameraModule && window.tabCameraModule.getFovSelection) ? window.tabCameraModule.getFovSelection() : null;
     window.stageItems.forEach(it => {
+      if (fov && !fov.itemIds.has(it.id) && it.id !== window.selectedStageItemId) return;
       const sel = it.id === window.selectedStageItemId, c = COLORS[it.category] || COLORS.table;
       const bz = baseZ(it), D = depthOf(it), H = it.h || 700, y0 = it.y - D / 2;
       ctx.save();
@@ -262,6 +264,7 @@
     syncUI();
   }
 
-  window.tabStageItemsModule = { init: buildUI, drawTop, drawSide, hitTest, onGrab, handleDrag, exportData, importData, syncUI, getBaseZ: baseZ };
+  window.tabStageItemsModule = { init: buildUI, drawTop, drawSide, hitTest, onGrab, handleDrag, exportData, importData, syncUI, getBaseZ: baseZ,
+    getZRange: (it) => [baseZ(it), baseZ(it) + (it.h || 700)] };
   window.Core.register('stage_items', window.tabStageItemsModule, { order: 30 });
 })();

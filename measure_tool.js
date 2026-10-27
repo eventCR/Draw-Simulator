@@ -126,7 +126,14 @@ window.MeasureTool = (function () {
       const base = o.baseType === 'floor' ? 0 : (o.baseType === 'stage' ? stageH : (onStage(o.x, o.y) ? stageH : 0));
       obj(o.x, o.y, o.w, o.shape === 'circle' ? o.w : o.d, o.angle, o.h, base, 'item', o.shape === 'circle');
     });
-    (window.equipments || []).forEach(o => obj(o.x, o.y, o.w, o.d, o.angle, o.h, onStage(o.x, o.y) ? stageH : 0, 'equip'));
+    (window.equipments || []).forEach(o => {
+      const z0 = (onStage(o.x, o.y) ? stageH : 0) + (o.type === 'speaker' ? (o.mountH || 0) : 0);
+      if (o.type === 'speaker' && o.shape !== 'rect' && top) {          // 台形スピーカー: 広い面と狭い面の角
+        const r = (o.angle || 0) * Math.PI / 180, c = Math.cos(r), sn = Math.sin(r), bw = Math.min(o.w, o.backW || o.w * 0.5);
+        add(o.x, o.y, 'equip');
+        [[-o.w / 2, o.d / 2], [o.w / 2, o.d / 2], [bw / 2, -o.d / 2], [-bw / 2, -o.d / 2]].forEach(q => add(o.x + q[0] * c - q[1] * sn, o.y + q[0] * sn + q[1] * c, 'equip'));
+      } else obj(o.x, o.y, o.w, o.d, o.angle, o.h, z0, 'equip');
+    });
     (window.monitors || []).forEach(o => {
       obj(o.x, o.y, o.baseW || o.w, o.baseD || o.d || 400, o.panAngle, 0, o.placeOn === 'stage' ? stageH : 0, 'monitor');
     });

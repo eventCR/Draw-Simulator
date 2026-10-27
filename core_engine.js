@@ -509,6 +509,19 @@
     return null;
   }
 
+  /** どのオブジェクトにも当たらなかった時に、モジュールが空き地のドラッグを引き受けるための口 (mod.hitFallback) */
+  function fallbackHit(wx, wy, view) {
+    const order = registry.slice().reverse();
+    for (const r of order) {
+      if (typeof r.mod.hitFallback !== 'function') continue;
+      let hit = null;
+      try { hit = r.mod.hitFallback(wx, wy, view); }
+      catch (e) { logError('hitFallback:' + r.key, e); }
+      if (hit) return { module: r.mod, key: r.key, item: hit };
+    }
+    return null;
+  }
+
   function setupCanvasEvents() {
     if (!canvas) return;
 
@@ -517,7 +530,8 @@
       if (window.MeasureTool && window.MeasureTool.isActive && window.MeasureTool.isActive()) return;
       modifiers.shift = e.shiftKey; modifiers.ctrl = e.ctrlKey || e.metaKey;
       const w = toWorld(e.clientX, e.clientY);
-      const hit = hitTestAll(w.wx, w.wy, w.view);
+      let hit = hitTestAll(w.wx, w.wy, w.view);
+      if (!hit) hit = fallbackHit(w.wx, w.wy, w.view);      // 何も無い所のドラッグ (範囲選択など)
       if (hit && typeof hit.module.handleDrag === 'function') {
         dragTarget = hit;
         dragMoved = false;

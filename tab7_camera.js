@@ -5,7 +5,8 @@
  * 依存: camera_base.js (状態), camera_angle.js (計算)
  * 他モジュール向け API:
  *   tabCameraModule.getBlockedSeatIds() → Set<seatId>   選択カメラで頭被りになる客席 (tab6 が赤表示に使用)
- *   tabCameraModule.getFovSelection()   → {seatIds, guestIds, podiumIds} | null   画角内の客席・登壇者・司会台/演台 (立面図の絞り込み)
+ *   tabCameraModule.getFovSelection()   → {seatIds, guestIds, podiumIds, equipIds, itemIds, monitorIds, panelIds, screenIds} | null
+ *                                       完全に画角内の客席・登壇者・司会台・機材・舞台什器・モニター・パネル・スクリーン (立面図の絞り込み)
  *   tabCameraModule.analyze(cam)        → {aim, sim}    照準・画角 / 頭被りシミュレーション
  * ==============================================================================
  */
@@ -31,7 +32,7 @@
     if (!cam) return null;
     try {
       const aim = CA.calculateAimAndFov(cam, window.stage, guestTargets(), CB.CAMERA_MODELS);
-      const sim = CA.simulateHeightClearance(cam, aim, window.seats, window.totalHeadZ);
+      const sim = CA.simulateHeightClearance(cam, aim, window.seats, window.totalHeadZ, undefined, window.chair);
       return { aim, sim };
     } catch (e) {
       window.debugBox && window.debugBox.error('カメラ計算エラー: ' + e.message);
@@ -52,15 +53,50 @@
     return Math.abs(d) <= half && Math.hypot(px - cam.x, py - cam.y) * Math.cos(d) > 0;
   }
 
+  /**
+   * 「完全に」画角内か。足跡の中心・四隅・各辺の中点のすべてが水平画角の内側にあること。
+   * zr=[下,上] (mm) を渡すと、その高さの範囲も垂直画角の内側に収まっていること (現在は使っていない)。
+   */
+  function rectFullyInFov(cam, aim, cx, cy, w, d, angleDeg, zr) {
+    const r = (angleDeg || 0) * Math.PI / 180, c = Math.cos(r), s = Math.sin(r), hw = (w || 0) / 2, hd = (d || 0) / 2;
+    const pts = [[0, 0], [-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd], [0, -hd], [0, hd], [-hw, 0], [hw, 0]];
+    const lens = cam.lensH || 0;
+    const ground = Math.max(Math.hypot(aim.targetX - cam.x, aim.targetY - cam.y), 1);
+    const thetaC = Math.atan2(aim.targetZ - lens, ground), halfV = (aim.vFov / 2) * Math.PI / 180;
+    return pts.every(q => {
+      const px = cx + q[0] * c - q[1] * s, py = cy + q[0] * s + q[1] * c;
+      if (!inFov(cam, aim, px, py)) return false;
+      if (!zr) return true;
+      let diff = Math.atan2(py - cam.y, px - cam.x) - aim.hAngle;
+      while (diff > Math.PI) diff -= 2 * Math.PI;
+      while (diff < -Math.PI) diff += 2 * Math.PI;
+      const depth = Math.max(Math.hypot(px - cam.x, py - cam.y) * Math.cos(diff), 1);       // 光軸方向の水平距離
+      return zr.every(z => { const ang = Math.atan2(z - lens, depth); return ang >= thetaC - halfV - 1e-6 && ang <= thetaC + halfV + 1e-6; });
+    });
+  }
+
   function getFovSelection() {
     if (!showFovProjection) return null;
     const cam = CB.getSelected();
     const a = analyze(cam);
     if (!a) return null;
+    const A = a.aim, ch = window.chair || { w: 500, d: 500 };
+    const Z = (mod, fn, o) => { const m = window[mod]; return (m && m[fn]) ? m[fn](o) : null; };
+    const fm = window.tabFacilityModule;
     return {
-      seatIds: new Set(window.seats.filter(s => inFov(cam, a.aim, s.x, s.y)).map(s => s.id)),
-      guestIds: new Set(window.tabGuestsModule.list.filter(g => inFov(cam, a.aim, g.x, g.y)).map(g => g.id)),
-      podiumIds: new Set((window.podiums || []).filter(p => inFov(cam, a.aim, p.x, p.y)).map(p => p.id))
+      // 客席・登壇者は高さは問わず、足跡の全体が水平画角に入っているものだけ (登壇者の足元を意図的に切る構図があるため)
+      seatIds: new Set(window.seats.filter(s => rectFullyInFov(cam, A, s.x, s.y, ch.w, ch.d, s.angle, null)).map(s => s.id)),
+      guestIds: new Set(window.tabGuestsModule.list.filter(g => rectFullyInFov(cam, A, g.x, g.y, 500, 500, 0, null)).map(g => g.id)),
+      // それ以外の物も、平面図の扇形 (水平画角) の中に足跡の全体が入っていれば表示する (高さは問わない)
+      podiumIds: new Set((window.podiums || []).filter(p => rectFullyInFov(cam, A, p.x, p.y, p.w, p.d, p.angle, null)).map(p => p.id)),
+      equipIds: new Set((window.equipments || []).filter(e => rectFullyInFov(cam, A, e.x, e.y, e.w, e.d, e.angle, null)).map(e => e.id)),
+      itemIds: new Set((window.stageItems || []).filter(e => rectFullyInFov(cam, A, e.x, e.y, e.w, e.shape === 'circle' ? e.w : e.d, e.angle, null)).map(e => e.id)),
+      monitorIds: new Set((window.monitors || []).filter(m => rectFullyInFov(cam, A, m.x, m.y, Math.max(m.w || 0, m.baseW || 0), m.baseD || 400, m.panAngle, null)).map(m => m.id)),
+      panelIds: new Set((window.panels || []).filter(p => {
+        const pos = fm && fm.getPanelPos ? fm.getPanelPos(p) : { x: p.x, y: p.y };
+        return rectFullyInFov(cam, A, pos.x + p.w / 2, pos.y + p.d / 2, p.w, p.d, 0, null);
+      }).map(p => p.id)),
+      screenIds: new Set((window.screens || []).filter(s => rectFullyInFov(cam, A, s.x, s.y, s.w, 100, s.angle, null)).map(s => s.id))
     };
   }
 
@@ -105,7 +141,7 @@
 
       <div class="ui-group">
         <div class="ui-group-title">立面図 (画角内の表示)</div>
-        <label class="chk"><input type="checkbox" id="camFovProj"> 画角内の客席・登壇者だけ立面図に表示</label>
+        <label class="chk"><input type="checkbox" id="camFovProj"> 完全に画角内のものだけ立面図に表示</label>
         <div id="camSliceInfo" class="hint"></div>
       </div>
 

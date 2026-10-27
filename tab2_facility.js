@@ -341,8 +341,10 @@
     ctx.restore();
     T(ctx, 'STAGE (H:' + st.h + ')', st.y + st.d / 2, -st.h / 2, { px: 10, bold: true, color: '#475569' });
 
+    const fov = (window.tabCameraModule && window.tabCameraModule.getFovSelection) ? window.tabCameraModule.getFovSelection() : null;
     window.panels.forEach(p => {
       if (!p.enabled) return;
+      if (fov && !fov.panelIds.has(p.id) && p.id !== window.selectedPanelId) return;
       const pos = panelPos(p), baseZ = p.posType === 'behind_stage' && !p.customPos ? 0 : st.h;
       ctx.save();
       ctx.fillStyle = '#e2e8f0'; ctx.strokeStyle = '#475569'; ctx.lineWidth = 20;
@@ -353,6 +355,7 @@
     });
 
     window.screens.forEach(s => {
+      if (fov && !fov.screenIds.has(s.id) && s.id !== window.selectedScreenId) return;
       const top = s.bottomZ + s.h;
       ctx.save();
       if (ceiling > top) {                       // 吊りワイヤー
@@ -429,6 +432,7 @@
     syncUI();
   }
 
-  window.tabFacilityModule = { init: buildUI, drawTop, drawSide, hitTest, onGrab, handleDrag, exportData, importData, syncUI, getPanelPos: panelPos };
+  window.tabFacilityModule = { init: buildUI, drawTop, drawSide, hitTest, onGrab, handleDrag, exportData, importData, syncUI, getPanelPos: panelPos,
+    getPanelZRange: (p) => { const bz = p.posType === 'behind_stage' && !p.customPos ? 0 : window.stage.h; return [bz, bz + p.h]; } };
   window.Core.register('facility', window.tabFacilityModule, { order: 20 });
 })();

@@ -174,20 +174,32 @@ window.CameraAngle = (function () {
    * 水平画角内かつカメラとターゲットの間にある座席を列挙する共通処理。
    * 各要素: { seat, distProj }
    */
-  function seatsInCone(cam, aim, seatList) {
+  function seatsInCone(cam, aim, seatList, size) {
     const out = [];
     const dx = aim.targetX - cam.x, dy = aim.targetY - cam.y;
     const groundDist = Math.hypot(dx, dy);
     if (groundDist < 1e-4) return { groundDist, list: out };
     const aimAngle = Math.atan2(dy, dx);
     const halfFov = aim.fov * RAD / 2;
+    const angDiff = (px, py) => {
+      let d = Math.atan2(py - cam.y, px - cam.x) - aimAngle;
+      while (d > Math.PI) d -= 2 * Math.PI;
+      while (d < -Math.PI) d += 2 * Math.PI;
+      return d;
+    };
+    const hw = size && size.w ? size.w / 2 : 0, hd = size && size.d ? size.d / 2 : 0;
 
     seatList.forEach(s => {
       if (!s) return;
-      let diff = Math.atan2(s.y - cam.y, s.x - cam.x) - aimAngle;
-      while (diff > Math.PI) diff -= 2 * Math.PI;
-      while (diff < -Math.PI) diff += 2 * Math.PI;
-      if (Math.abs(diff) > halfFov) return;
+      const diff = angDiff(s.x, s.y);
+      // 席の中心が画角内、または席の端 (四隅・各辺の中点) が少しでも画角に掛かっていれば対象にする
+      let inside = Math.abs(diff) <= halfFov;
+      if (!inside && (hw || hd)) {
+        const r = (s.angle || 0) * RAD, c = Math.cos(r), sn = Math.sin(r);
+        inside = [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd], [0, -hd], [0, hd], [-hw, 0], [hw, 0]].some(q =>
+          Math.abs(angDiff(s.x + q[0] * c - q[1] * sn, s.y + q[0] * sn + q[1] * c)) <= halfFov);
+      }
+      if (!inside) return;
       const distProj = Math.hypot(s.x - cam.x, s.y - cam.y) * Math.cos(diff);
       if (distProj > 0 && distProj < groundDist) out.push({ seat: s, distProj });
     });
@@ -198,14 +210,14 @@ window.CameraAngle = (function () {
    * 頭被り判定: 垂直画角の下端レイが着席時の頭頂より低い座席 = 見切れ
    * @returns {Array} 遮蔽している座席
    */
-  function checkHeadBlock(cam, aim, seats, headZ) {
+  function checkHeadBlock(cam, aim, seats, headZ, seatSize) {
     const seatList = asArray(seats);
     if (!cam || !aim || seatList.length === 0) return [];
     const hz = (typeof headZ === 'number' && !isNaN(headZ)) ? headZ : DEFAULT_HEAD_Z;
     const camZ = cam.lensH || 1600;
     const tgtZ = typeof aim.targetZ === 'number' ? aim.targetZ : 1200;
 
-    const { groundDist, list } = seatsInCone(cam, aim, seatList);
+    const { groundDist, list } = seatsInCone(cam, aim, seatList, seatSize);
     const halfV = getVerticalFov(aim.fov) * RAD / 2;
     const thetaLower = Math.atan2(tgtZ - camZ, groundDist) - halfV;
 
@@ -217,8 +229,9 @@ window.CameraAngle = (function () {
   /**
    * 頭被り判定 + 全座席をクリアするために必要なレンズ高の逆算
    * @param {number} [margin=50] 視線と頭頂の離隔 (mm)
+   * @param {{w:number,d:number}} [seatSize] 席の寸法。渡すと、席の端が少しでも画角に掛かる席も判定する
    */
-  function simulateHeightClearance(cam, aim, seats, headZ, margin) {
+  function simulateHeightClearance(cam, aim, seats, headZ, margin, seatSize) {
     const seatList = asArray(seats);
     const hz = (typeof headZ === 'number' && !isNaN(headZ)) ? headZ : DEFAULT_HEAD_Z;
     const mg = (typeof margin === 'number') ? margin : 50;
@@ -231,7 +244,7 @@ window.CameraAngle = (function () {
     const blocked = [];
 
     if (aim && seatList.length > 0) {
-      const { groundDist, list } = seatsInCone(c, aim, seatList);
+      const { groundDist, list } = seatsInCone(c, aim, seatList, seatSize);
       const halfV = getVerticalFov(aim.fov) * RAD / 2;
       const tanHalfV = Math.tan(halfV);
       const thetaLower = Math.atan2(tgtZ - camZ, groundDist) - halfV;
