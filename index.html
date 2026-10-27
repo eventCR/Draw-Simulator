@@ -76,6 +76,12 @@
   </div>
 
   <!-- HUD: 立面スクロール -->
+  <div id="top-scrollbar-container">
+    <label for="top-scroll-range">↔ 平面スクロール (横):</label>
+    <button class="scroll-step-btn" data-action="topStep" data-arg="-2000">◀ -2m</button>
+    <input type="range" id="top-scroll-range" min="0" max="0" value="0" step="10">
+    <button class="scroll-step-btn" data-action="topStep" data-arg="2000">+2m ▶</button>
+  </div>
   <div id="side-scrollbar-container">
     <label for="side-scroll-range">↔ 立面スクロール (奥行き):</label>
     <button class="scroll-step-btn" data-action="sideStep" data-arg="-1000">◀ -1m</button>

@@ -351,11 +351,27 @@
       canvas.width = Math.round(r.w * scale + MARGIN * 2);
       canvas.height = Math.round(r.d * scale + MARGIN * 2);
     } else {
-      canvas.width = Math.round(r.d * scale + MARGIN * 2);
+      // 立面図は表示領域の幅に収め、横の移動はスライダー (立面スクロール) で行う。
+      // 長い会場でも最初からステージ側が見え、中央の空白に飛ばされない
+      const full = Math.round(r.d * scale + MARGIN * 2);
+      const cont = document.getElementById('main-container');
+      canvas.width = (window.exporting || !cont) ? full : Math.max(600, Math.min(full, cont.clientWidth));
       canvas.height = Math.max(900, Math.round((SIDE_FLOOR_OFFSET_Y + 4000) * scale + MARGIN * 2));
     }
     const badge = document.getElementById('zoomBadge');
     if (badge) badge.innerText = Math.round(zoomLevel * 100) + '%';
+    updateTopScrollBar();
+  }
+
+  /** 平面図: 会場が表示領域より横に広いときだけ、横スクロールのバーを出す */
+  function updateTopScrollBar() {
+    const box = document.getElementById('top-scrollbar-container'), range = document.getElementById('top-scroll-range');
+    const cont = document.getElementById('main-container');
+    if (!box || !range || !cont || !canvas) return;
+    const max = Math.max(0, canvas.width - cont.clientWidth);
+    range.max = max;
+    range.value = cont.scrollLeft;
+    box.style.display = (window.viewMode === 'top' && max > 0) ? 'flex' : 'none';
   }
 
   function applySideScroll() {
@@ -418,6 +434,7 @@
     if (bs) bs.classList.toggle('active', mode === 'side');
     const sb = document.getElementById('side-scrollbar-container');
     if (sb) sb.style.display = (mode === 'side') ? 'flex' : 'none';
+    updateTopScrollBar();
     const badge = document.getElementById('viewModeBadge');
     if (badge) badge.innerText = (mode === 'top') ? '🗺️ 平面図' : '📐 立面図';
     const fov = document.getElementById('btn-fov');
@@ -806,6 +823,7 @@
     },
     palette: togglePalette,
     collapsePalette,
+    topStep: (arg) => { const c = document.getElementById('main-container'); if (c) c.scrollLeft += (parseFloat(arg) || 0) * scale; },
     sideStep: (arg) => setSideScroll((window.sideScrollY || 0) + (parseFloat(arg) || 0)),
     viewTop: () => setViewMode('top'),
     viewSide: () => setViewMode('side'),
@@ -828,6 +846,19 @@
 
     const range = document.getElementById('side-scroll-range');
     if (range) range.addEventListener('input', () => setSideScroll(range.value));
+    const trange = document.getElementById('top-scroll-range'), cont = document.getElementById('main-container');
+    if (trange && cont) {
+      trange.addEventListener('input', () => { cont.scrollLeft = parseFloat(trange.value) || 0; });
+      cont.addEventListener('scroll', () => { trange.value = cont.scrollLeft; });
+      // 立面図: 横スクロール (Shift+ホイール / トラックパッドの横スワイプ) でスライダーと同じ移動
+      cont.addEventListener('wheel', e => {
+        if (window.viewMode !== 'side') return;
+        const dx = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : (e.shiftKey ? e.deltaY : 0);
+        if (!dx) return;
+        e.preventDefault();
+        setSideScroll((window.sideScrollY || 0) + dx / scale);
+      }, { passive: false });
+    }
 
     const file = document.getElementById('importFile');
     if (file) file.addEventListener('change', () => {
@@ -857,7 +888,7 @@
       else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
     });
 
-    window.addEventListener('resize', () => { updateSideScrollRange(); applySideScroll(); });
+    window.addEventListener('resize', () => { updateCanvasSize(); updateSideScrollRange(); applySideScroll(); });
   }
 
   // ============================================================================
