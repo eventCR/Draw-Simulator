@@ -686,6 +686,7 @@
     },
     drawTop, drawSide, hitTest, hitFallback, onGrab, handleDrag, exportData, importData, syncUI,
     getStats, rebuildSeats,
+    getGrid: () => clone(grid),
     /** 外部 (AI生成など) からグリッド条件を渡して再配置する */
     configureGrid(cfg) {
       if (!cfg) return;

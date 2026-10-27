@@ -305,7 +305,31 @@
     reader.readAsText(file);
   }
 
+  /**
+   * 書き出し用: 表示倍率を一時的に上げ (立面は奥行き全体を表示) て同期描画し、fn(canvas, info) の結果を返す。
+   * 終わったら元の表示に戻す。
+   */
+  function withExportView(minWidthPx, fn) {
+    const oz = zoomLevel, os = window.sideScrollY, opx = window.panX, opy = window.panY;
+    try {
+      window.exporting = true;
+      zoomLevel = 1; window.sideScrollY = 0; window.panY = MARGIN;
+      updateCanvasSize();
+      const k = Math.max(1, Math.min(3, (minWidthPx || 0) / canvas.width));
+      zoomLevel = k;
+      updateCanvasSize();
+      window.panX = MARGIN; window.panY = MARGIN;
+      render();
+      return fn(canvas, { scale, panX: window.panX, panY: window.panY, view: window.viewMode, floorY: SIDE_FLOOR_OFFSET_Y });
+    } finally {
+      window.exporting = false;
+      zoomLevel = oz; window.sideScrollY = os; window.panX = opx; window.panY = opy;
+      updateCanvasSize(); updateSideScrollRange(); applySideScroll();
+    }
+  }
+
   function exportPng() {
+    if (window.ExportSheet) { window.ExportSheet.exportPng(); return; }
     if (!canvas) return;
     canvas.toBlob(blob => {
       if (!blob) { log('画像出力に失敗しました', 'error'); return; }
@@ -772,6 +796,7 @@
     confirmSave,
     open: openFilePicker,
     exportPng,
+    exportPdf: () => window.ExportSheet ? window.ExportSheet.exportPdf() : log('書き出しモジュールが読み込まれていません', 'warn'),
     measure: () => {
       const mt = window.MeasureTool;
       if (!mt || typeof mt.toggle !== 'function') { log('計測ツールが読み込まれていません', 'warn'); return; }
@@ -843,7 +868,7 @@
     BASE_SCALE_TOP, BASE_SCALE_SIDE, SIDE_FLOOR_OFFSET_Y,
     register, getModule, on, emit,
     commit, batch, undo, redo,
-    exportProject, importProject,
+    exportProject, importProject, withExportView, download,
     requestRender, isInsideStage,
     toWorld, switchTab, setViewMode,
     drawText, drawDimLine, drawPersonSide, util,
