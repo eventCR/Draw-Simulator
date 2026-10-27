@@ -248,7 +248,9 @@
       const rows = tableLines(D, view);
       const meta = window.exportMeta || {}, metaOn = !!meta.enabled;
       const headH = Math.round(fs * (metaOn ? 5.4 : 3.6)), lineH = Math.round(fs * 1.7);
-      const tableH = Math.round(fs * 1.6 + rows.length * lineH + fs * 1.2);
+      const STAMPS = { owl: 'アウル株式会社', owlcraft: 'アウルクラフト株式会社' };
+      const stampText = STAMPS[meta.stamp] || '';
+      const tableH = Math.max(Math.round(fs * 1.6 + rows.length * lineH + fs * 1.2), stampText ? Math.round(fs * 5.2) : 0);
       const out = document.createElement('canvas');
       out.width = sheetW; out.height = headH + H + tableH;
       const g = out.getContext('2d');
@@ -297,6 +299,18 @@
         g.textAlign = 'left'; g.font = 'bold ' + fs + 'px ' + FONT; g.fillStyle = INK; g.fillText(r[0], fs, yy);
         g.font = fs + 'px ' + FONT; g.fillStyle = '#334155'; g.fillText(r[1], fs + fs * 11, yy);
       });
+      if (stampText) {   // 右下の刻印: 枠つきの社名
+        const sf = Math.round(fs * 1.5);
+        g.font = 'bold ' + sf + 'px ' + FONT;
+        const tw = g.measureText(stampText).width, bw = tw + sf * 1.6, bh = sf * 2.1;
+        const bx = sheetW - fs - bw, by = out.height - fs * 0.8 - bh;
+        g.save();
+        g.strokeStyle = '#334155'; g.lineWidth = Math.max(2, fs / 8);
+        g.beginPath(); g.roundRect(bx, by, bw, bh, sf * 0.25); g.stroke();
+        g.fillStyle = '#334155'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(stampText, bx + bw / 2, by + bh / 2 + sf * 0.05);
+        g.restore();
+      }
       return { canvas: out, view };
     });
   }

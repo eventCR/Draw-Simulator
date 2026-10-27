@@ -23,7 +23,7 @@
 
   // 書き出し (PNG/PDF) の見出しに入れる案件情報。社内共有などで不要なときは enabled をオフにする
   const META_FIELDS = [['project', '案件'], ['client', 'クライアント名'], ['venue', '会場'], ['date', '日付 (空欄=書き出し日)'], ['author', '作成者'], ['version', 'バージョン']];
-  window.exportMeta = { enabled: true, project: '', client: '', venue: '', date: '', author: '', version: '' };
+  window.exportMeta = { enabled: true, project: '', client: '', venue: '', date: '', author: '', version: '', stamp: 'owl' };
 
   function buildUI(panel) {
     if (!panel) return;
@@ -44,7 +44,17 @@
         </label>
         ${META_FIELDS.map(([k, label]) => `
           <div class="input-box"><label>${label}</label><input type="text" data-meta="${k}"></div>`).join('')}
+        <div class="input-box"><label>右下の刻印</label>
+          <select id="metaStamp">
+            <option value="owl">アウル株式会社</option>
+            <option value="owlcraft">アウルクラフト株式会社</option>
+            <option value="none">なし</option>
+          </select>
+        </div>
       </div>`;
+    panel.querySelector('#metaStamp').addEventListener('change', e => {
+      window.exportMeta.stamp = e.target.value; window.Core.commit('書き出し刻印');
+    });
     panel.querySelector('#metaEnabled').addEventListener('change', e => {
       window.exportMeta.enabled = e.target.checked; sync(); window.Core.commit('書き出し情報');
     });
@@ -69,6 +79,8 @@
     });
     const m = window.exportMeta, en = document.getElementById('metaEnabled');
     if (en) en.checked = !!m.enabled;
+    const st = document.getElementById('metaStamp');
+    if (st) st.value = m.stamp || 'none';
     document.querySelectorAll('#panel-display [data-meta]').forEach(inp => {
       inp.value = m[inp.dataset.meta] || '';
       inp.disabled = !m.enabled;
@@ -78,7 +90,7 @@
 
   function exportData() { return JSON.parse(JSON.stringify(window.exportMeta)); }
   function importData(d) {
-    window.exportMeta = Object.assign({ enabled: true, project: '', client: '', venue: '', date: '', author: '', version: '' }, d || {});
+    window.exportMeta = Object.assign({ enabled: true, project: '', client: '', venue: '', date: '', author: '', version: '', stamp: 'owl' }, d || {});
     sync();
   }
 
