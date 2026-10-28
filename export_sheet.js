@@ -178,6 +178,7 @@
     });
     seatRows(seats, chair).forEach(r => iv.push({ a: r[0].y - chair.d / 2, b: r[0].y + chair.d / 2 }));
     platforms.forEach(p => iv.push({ a: p.y - p.d / 2, b: p.y + p.d / 2 }));
+    ((window.tabSeatsModule && window.tabSeatsModule.getTables && window.tabSeatsModule.getTables()) || []).forEach(t => iv.push({ a: t.y - t.d / 2, b: t.y + t.d / 2 }));   // テーブル
     iv.sort((p, q) => p.a - q.a);
     const merged = [];
     iv.forEach(v => {
@@ -221,11 +222,15 @@
     L.push(['ステージ', size(stage.w, stage.d, stage.h)]);
     panels.forEach(p => L.push([p.name || 'バックパネル', size(p.w, p.d, p.h)]));
     platforms.forEach(p => L.push([p.name || 'カメラ台', size(p.w, p.d, p.h || 0)]));
-    if (seats.length) {
-      const g = (window.tabSeatsModule && window.tabSeatsModule.getGrid && window.tabSeatsModule.getGrid()) || {};
-      L.push(['椅子 / 客席', '席 W' + mm(chair.w) + ' × D' + mm(chair.d) + ' / ' + seats.length + ' 席' +
-        (g.rowGap != null ? ' / 列間隔 ' + mm(g.rowGap) + ' (後脚→次列の前脚)' : '') +
-        (g.seatGapX != null ? ' / 席隙間 ' + mm(g.seatGapX) + ' (右脚→左脚)' : '')]);
+    const groups = (window.tabSeatsModule && window.tabSeatsModule.getGroups && window.tabSeatsModule.getGroups()) || [];
+    if (seats.length && groups.length) {
+      groups.forEach(gr => {
+        if (!gr.count) return;
+        const g = gr.grid, t = gr.table;
+        L.push([groups.length > 1 ? gr.name : '椅子 / 客席', '席 W' + mm(chair.w) + ' × D' + mm(chair.d) + ' / ' + gr.count + ' 席' +
+          ' / 列間隔 ' + mm(g.rowGap) + ' (後脚→次列の前脚) / 席隙間 ' + mm(g.seatGapX) + ' (右脚→左脚)' +
+          (t && t.mode !== 'none' ? ' / テーブル ' + (t.mode === 'perSeat' ? 'W' + mm(t.w) + '×' : '') + 'D' + mm(t.d) + '×H' + mm(t.h) + ' (椅子との距離 ' + mm(t.gap) + ')' : '')]);
+      });
     }
     return L;
   }
@@ -240,7 +245,7 @@
       if (view === 'side') {
         const fsz = Math.max(16, Math.round(W / 95));
         cropY = Math.max(0, Math.round(info.panY + (info.floorY - (D.room.h || 5000)) * info.scale - fsz * 3));
-        H = Math.min(src.height, Math.round(info.panY + info.floorY * info.scale + fsz * 7)) - cropY;
+        H = Math.min(src.height, Math.round(info.panY + info.floorY * info.scale + fsz * 10)) - cropY;
       }
       const fs = Math.max(16, Math.round(W / 95));
       const sheetW = Math.max(W, fs * 70);
