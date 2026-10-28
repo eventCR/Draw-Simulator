@@ -146,7 +146,7 @@
       if (listRes.ok) {
         const j = await listRes.json();
         usable = (j.models || []).filter(m =>
-          Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent') && !m.name.includes('2.5'));
+          Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent') && !m.name.includes('2.5') && !/gemma|embed|aqa|imagen|image|tts|audio|live|vision|learnlm/i.test(m.name));
       }
 
       const priority = ['gemini-3.8-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro', 'gemini-1.5-pro-latest'];
@@ -158,40 +158,66 @@
       usable.forEach(m => { if (!candidates.includes(m.name)) candidates.push(m.name); });
       if (!candidates.length) candidates.push('models/gemini-3.8-flash', 'models/gemini-1.5-flash', 'models/gemini-1.5-pro');
 
-      const parts = [{ text: buildSystemPrompt() }];
+      const sysText = buildSystemPrompt();
+      const parts = [];
       if (imageBase64) {
         parts.push({ inline_data: { mime_type: imageMime || 'image/png', data: imageBase64 } });
         parts.push({ text: '添付された会場平面図の障害物・柱・形状を正確に読み取り、それに適応したレイアウトを設計してください。' });
       }
       if (userPrompt) parts.push({ text: '【ユーザーの個別要望・会場条件】\n' + userPrompt });
+      parts.push({ text: '上記の条件に従い、指定のJSONオブジェクトのみを出力してください。指示文や説明を繰り返してはいけません。' });
 
-      let rawText = null, usedModel = '', lastError = '';
+      /** 1モデルに1回問い合わせる。指示文は systemInstruction で渡し、非対応モデルでは本文に入れ直す */
+      async function ask(path, useSys) {
+        const body = {
+          contents: [{ role: 'user', parts: useSys ? parts : [{ text: sysText }].concat(parts) }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.2 }
+        };
+        if (useSys) body.systemInstruction = { parts: [{ text: sysText }] };
+        const res = await fetch('https://generativelanguage.googleapis.com/v1beta/' + path + ':generateContent?key=' + INTERNAL_API_KEY, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+        if (!res.ok) {
+          let detail = 'HTTP ' + res.status + ' ' + res.statusText;
+          try { const ej = await res.json(); if (ej.error && ej.error.message) detail = ej.error.message; } catch (_) { /* noop */ }
+          const e = new Error(detail); e.status = res.status; throw e;
+        }
+        const data = await res.json();
+        const ps = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
+        const text = ps ? ps.map(x => x.text || '').join('') : '';
+        if (!text) throw new Error('空の応答');
+        return text;
+      }
+
+      // 応答が「JSONとして読めて、会場(room)かステージ(stage)を含む」ものだけを採用する。
+      // 指示文のオウム返しや壊れたJSONは、そのモデルを再試行 → だめなら次のモデルへ
+      let layoutRaw = null, usedModel = '', lastError = '';
+      outer:
       for (let i = 0; i < candidates.length; i++) {
         const path = candidates[i], short = path.replace('models/', '');
-        setStatus('⚡ AI空間設計を実行中... (試行 ' + (i + 1) + '/' + candidates.length + ': ' + short + ')');
-        btn.innerText = '⏳ 設計中 (' + short + ')...';
-        try {
-          const res = await fetch('https://generativelanguage.googleapis.com/v1beta/' + path + ':generateContent?key=' + INTERNAL_API_KEY, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts }], generationConfig: { responseMimeType: 'application/json', temperature: 0.2 } })
-          });
-          if (!res.ok) {
-            let detail = 'HTTP ' + res.status + ' ' + res.statusText;
-            try { const ej = await res.json(); if (ej.error && ej.error.message) detail = ej.error.message; } catch (_) { /* noop */ }
-            lastError = short + ': ' + detail;               // 混雑・受付終了は次のモデルへ
-            continue;
+        let useSys = true;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          setStatus('⚡ AI空間設計を実行中... (モデル ' + (i + 1) + '/' + candidates.length + ': ' + short + (attempt > 1 ? ' / 再試行' : '') + ')');
+          btn.innerText = '⏳ 設計中 (' + short + ')...';
+          try {
+            let text;
+            try { text = await ask(path, useSys); }
+            catch (err) {
+              if (useSys && err.status === 400) { useSys = false; text = await ask(path, false); }   // systemInstruction 非対応モデル
+              else throw err;
+            }
+            const obj = cleanAndParseJson(text);
+            if (!obj || typeof obj !== 'object' || (!obj.room && !obj.stage)) throw new Error('レイアウトのJSONではない応答');
+            layoutRaw = obj; usedModel = short; break outer;
+          } catch (err) {
+            lastError = short + ': ' + String(err.message).split('\n')[0];
+            if (err.status && err.status !== 429 && err.status < 500) break;       // 認証・対応外などは同じモデルを繰り返さない
           }
-          const data = await res.json();
-          const t = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0];
-          if (t && t.text) { rawText = t.text; usedModel = short; break; }
-        } catch (err) {
-          lastError = short + ': ' + err.message;
         }
       }
-      if (!rawText) throw new Error('全候補モデルでの試行が混雑・エラーとなりました。\n最新エラー: ' + lastError);
+      if (!layoutRaw) throw new Error('全候補モデルで有効なレイアウトを得られませんでした。\n最新エラー: ' + lastError);
 
-      const layout = clampLayoutToBounds(cleanAndParseJson(rawText));
+      const layout = clampLayoutToBounds(layoutRaw);
       applyLayout(layout);
       setStatus('✅ AIレイアウトを生成し、全タブへ反映しました (使用モデル: ' + usedModel + ')。「戻す」で元に戻せます。', 'ok');
       window.debugBox && window.debugBox.info('AI生成完了: ' + usedModel);
@@ -207,11 +233,26 @@
   // ---------------------------------------------------------------- 応答の整形
   function cleanAndParseJson(str) {
     if (typeof str !== 'string') throw new Error('パース対象が文字列ではありません');
-    let s = str.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-    const a = s.indexOf('{'), b = s.lastIndexOf('}');
-    if (a !== -1 && b > a) s = s.substring(a, b + 1);
-    try { return JSON.parse(s); }
-    catch (e) { throw new Error('JSON構文エラー: AI応答のパースに失敗しました (' + e.message + ')\n生データ:\n' + str.substring(0, 150) + '...'); }
+    const s = str.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    try { return JSON.parse(s); } catch (_) { /* 前後に文章が付いた場合は下で { } を探す */ }
+    // 文中の { ... } を括弧の対応で切り出し、JSONとして読めたもののうち最大のものを採用する
+    let best = null;
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] !== '{') continue;
+      let depth = 0, inStr = false, esc = false;
+      for (let j = i; j < s.length; j++) {
+        const c = s[j];
+        if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+        if (c === '"') inStr = true;
+        else if (c === '{') depth++;
+        else if (c === '}' && --depth === 0) {
+          try { const o = JSON.parse(s.substring(i, j + 1)); if (!best || (j + 1 - i) > best.len) best = { o, len: j + 1 - i }; } catch (_) { /* 次へ */ }
+          break;
+        }
+      }
+    }
+    if (best) return best.o;
+    throw new Error('JSON構文エラー: AI応答のパースに失敗しました\n生データ:\n' + str.substring(0, 150) + '...');
   }
 
   /** 会場の範囲内に座標・寸法を収める */
