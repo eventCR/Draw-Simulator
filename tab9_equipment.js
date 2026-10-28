@@ -234,6 +234,9 @@
     const T = window.Core.drawText;
     const fov = (window.tabCameraModule && window.tabCameraModule.getFovSelection) ? window.tabCameraModule.getFovSelection() : null;
     window.equipments.forEach(eq => {
+      const ds = window.displaySettings;
+      if ((eq.type === 'light' && ds.sideLight === false) || (eq.type === 'speaker' && ds.sideSpeaker === false) ||
+          ((eq.type === 'ope' || eq.type === 'custom') && ds.sideOpe === false)) return;      // 立面図の表示対象から外されている
       if (fov && !fov.equipIds.has(eq.id) && eq.id !== window.selectedEquipId) return;      // 画角外は描かない (選択中は残す)
       const sel = eq.id === window.selectedEquipId, bz = baseZ(eq), sp = spans(eq);
       ctx.save();

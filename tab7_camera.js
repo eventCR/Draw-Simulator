@@ -171,9 +171,18 @@
           <div class="input-box"><label>台高 H (mm)</label><input type="number" id="platH" step="50"></div>
         </div>
         <div class="ui-row">
-          <div class="input-box"><label>最後尾席からの距離 (mm)</label><input type="number" id="camDistFromLastRow" value="2000" step="100"></div>
-          <button class="btn-action" id="btnAlignLastRow">最後尾から配置</button>
+          <div class="input-box">
+            <label>配置の基準</label>
+            <select id="camAlignRef">
+              <option value="lastRow">最後尾席の後ろ脚から</option>
+              <option value="backWall">会場の後壁から</option>
+              <option value="stageFront">ステージ前縁から</option>
+            </select>
+          </div>
+          <div class="input-box"><label>基準からの距離 (mm)</label><input type="number" id="camDistFromLastRow" value="2000" step="100"></div>
+          <button class="btn-action" id="btnAlignLastRow">この基準で配置</button>
         </div>
+        <div class="hint">距離は、基準から台(台なしならカメラ)の一番近い辺までです。後壁からは台の後ろの辺までの距離になります。左右は上の「中心 X」で指定します。</div>
         <div class="ui-row" style="justify-content:flex-end"><button class="btn-action sm btn-danger" id="btnDelPlat">この台を削除 (載っているカメラは台なしに)</button></div>
       </div>`;
     bind();
@@ -195,8 +204,8 @@
     $('btnAlignLastRow').addEventListener('click', () => {
       const target = CB.getSelectedPlatform() || sel();            // 台があれば台 (載っているカメラも一緒に移動)
       if (!target) return;
-      CB.alignFromLastRow(target, num('camDistFromLastRow', 2000), window.seats, window.chair.d);
-      updateUI(); redraw(); commit('台を最後尾から配置');
+      CB.alignFromRef(target, $('camAlignRef').value, num('camDistFromLastRow', 2000), { seats: window.seats, chairD: window.chair.d, room: window.room, stage: window.stage });
+      updateUI(); redraw(); commit('台を基準から配置');
     });
     $('btnAddPlat').addEventListener('click', () => {
       CB.addPlatform(window.room.w, window.stage.y, window.stage.d);

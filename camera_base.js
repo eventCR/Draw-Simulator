@@ -207,6 +207,36 @@ window.CameraBase = (function () {
     }
   }
 
+  /**
+   * 基準からの距離で Y を決める。距離は「基準 → 台(カメラ)の最も近い辺」まで。
+   *   lastRow    : 最後尾席の後ろ脚 → 台の前辺 (ステージ側の辺)
+   *   backWall   : 会場の後壁       → 台の後辺 (壁側の辺)
+   *   stageFront : ステージ前縁     → 台の前辺
+   * env: { seats, chairD, room, stage }
+   */
+  function alignFromRef(target, ref, dist, env) {
+    if (!target) return;
+    env = env || {};
+    const d = parseFloat(dist); const dd = isFinite(d) ? d : 0;
+    const isPlat = target.w !== undefined && target.d !== undefined;
+    const half = isPlat ? (target.d || 1000) / 2 : 500;
+    let y;
+    if (ref === 'backWall') {
+      const pts = (env.room && env.room.points) || [];
+      const back = pts.length ? Math.max.apply(null, pts.map(p => p.y)) : ((env.room && env.room.d) || 20000);
+      y = back - dd - half;
+    } else if (ref === 'stageFront') {
+      const st = env.stage || { y: 0, d: 0 };
+      y = st.y + st.d + dd + half;
+    } else {
+      const list = Array.isArray(env.seats) ? env.seats : [];
+      const lastRowY = list.length ? Math.max.apply(null, list.map(q => q.y)) + (env.chairD || 480) / 2 : 15000;
+      y = lastRowY + dd + half;
+    }
+    target.y = Math.round(y);
+    if (isPlat) syncAll();
+  }
+
   // ---------------------------------------------------------------- 保存 / 復元
   function exportData() {
     return { list: clone(cameras), platforms: clone(platforms), selectedId, selectedPlatformId };
@@ -249,7 +279,7 @@ window.CameraBase = (function () {
     getAll, getById, getSelected, getSelectedId, setSelectedId,
     getPlatforms, getPlatformById, getPlatformOf, getSelectedPlatform, getSelectedPlatformId, setSelectedPlatformId, camerasOn,
     syncFromPlatform, syncAll, moveCameraTo, setLensHeight, movePlatformTo, distributeOnPlatform, assignCamera,
-    addCamera, addPlatform, deleteSelected, deletePlatform, alignFromLastRow,
+    addCamera, addPlatform, deleteSelected, deletePlatform, alignFromLastRow, alignFromRef,
     exportData, importData
   };
 })();

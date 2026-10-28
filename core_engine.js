@@ -61,7 +61,13 @@
     showCamFov: true,        // カメラ視野角 (旧 showFov と統一)
     showMonitorFov: false,
     showMonitorAngles: true,
-    showMonitorDims: false
+    showMonitorDims: false,
+    // 立面図に表示するか (バックパネル・スクリーン・ステージ・舞台什器・登壇者・客席は常に表示)
+    sidePodium: true,        // 司会台・演台
+    sideLight: true,         // 照明
+    sideSpeaker: true,       // スピーカー
+    sideOpe: true,           // オペ卓・制作物
+    sideMonitor: true        // 返しモニター
   }, window.displaySettings || {});
 
   let canvas = null, ctx = null;

@@ -265,6 +265,7 @@
   function drawSide(ctx) {
     const T = window.Core.drawText;
     const fov = (window.tabCameraModule && window.tabCameraModule.getFovSelection) ? window.tabCameraModule.getFovSelection() : null;
+    if (window.displaySettings.sideMonitor === false) return;
     window.monitors.forEach((m, idx) => {
       if (fov && !fov.monitorIds.has(m.id) && m.id !== selectedId) return;
       const sel = m.id === selectedId, bz = baseZ(m), bD = m.baseD, mH = m.h, f = facing(m), low = m.stand === 'low';

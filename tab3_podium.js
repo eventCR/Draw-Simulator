@@ -165,6 +165,7 @@
     // 「画角内だけ立面図に表示」がONのときは、カメラの画角外の司会台・演台を描かない
     const cm = window.tabCameraModule;
     const fov = (cm && cm.getFovSelection) ? cm.getFovSelection() : null;
+    if (window.displaySettings.sidePodium === false) return;
     window.podiums.forEach(p => {
       if (!p.enabled) return;
       if (fov && fov.podiumIds && !fov.podiumIds.has(p.id)) return;

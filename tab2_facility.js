@@ -83,6 +83,15 @@
             </select>
           </div>
         </div>
+        <div class="ui-row">
+          <div class="input-box"><label>中央に配置</label>
+            <span class="btn-cluster">
+              <button class="btn-action sm" id="btnPanelCenterStage">ステージ中央</button>
+              <button class="btn-action sm" id="btnPanelCenterRoom">部屋中央</button>
+            </span>
+          </div>
+          <div class="input-box"><label>&nbsp;</label><label class="chk"><input type="checkbox" id="panelCenterY"> 奥行(Y)も中央</label></div>
+        </div>
         <div class="ui-row hidden" id="panelCustomCoordBox">
           <div class="input-box"><label>配置 X</label><input type="number" id="panelX" step="100"></div>
           <div class="input-box"><label>配置 Y</label><input type="number" id="panelY" step="100"></div>
@@ -117,6 +126,15 @@
             <div class="input-box"><label>名称</label><input type="text" id="screenName"></div>
             <div class="input-box"><label>幅 (W)</label><input type="number" id="screenW" step="100"></div>
             <div class="input-box"><label>高さ (H)</label><input type="number" id="screenH" step="100"></div>
+          </div>
+          <div class="ui-row">
+            <div class="input-box"><label>中央に配置</label>
+              <span class="btn-cluster">
+                <button class="btn-action sm" id="btnScreenCenterStage">ステージ中央</button>
+                <button class="btn-action sm" id="btnScreenCenterRoom">部屋中央</button>
+              </span>
+            </div>
+            <div class="input-box"><label>&nbsp;</label><label class="chk"><input type="checkbox" id="screenCenterY"> 奥行(Y)も中央</label></div>
           </div>
           <div class="ui-row">
             <div class="input-box"><label>配置 X</label><input type="number" id="screenX" step="100"></div>
@@ -193,6 +211,34 @@
     ['panelName', 'panelEnabled', 'panelCustomPos', 'panelW', 'panelH', 'panelD', 'panelPosType', 'panelX', 'panelY']
       .forEach(id => $(id).addEventListener('change', () => { if (readPanel()) { syncUI(); redraw(); commit('パネル変更'); } }));
 
+    // ---- 中央に配置 (ステージ中央 / 部屋中央)。Y は「奥行も中央」にチェックしたときだけ動かす
+    const centerOf = (ref) => {
+      if (ref === 'stage') { const st = window.stage; return { x: st.x + st.w / 2, y: st.y + st.d / 2 }; }
+      const pts = (window.room && window.room.points) || [];
+      if (!pts.length) return { x: window.room.w / 2, y: window.room.d / 2 };
+      const xs = pts.map(q => q.x), ys = pts.map(q => q.y);
+      return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
+    };
+    const centerPanel = (ref) => {
+      const p = selPanel(); if (!p) return;
+      const c = centerOf(ref), cur = panelPos(p);
+      p.customPos = true;                                    // 中央指定は座標で持つ (自由配置に切り替わる)
+      p.x = Math.round(c.x - p.w / 2);
+      p.y = Math.round($('panelCenterY').checked ? c.y - p.d / 2 : cur.y);
+      syncUI(); redraw(); commit('パネルを中央へ');
+    };
+    const centerScreen = (ref) => {
+      const sc = selScreen(); if (!sc) return;
+      const c = centerOf(ref);
+      sc.x = Math.round(c.x);
+      if ($('screenCenterY').checked) sc.y = Math.round(c.y);
+      syncUI(); redraw(); commit('スクリーンを中央へ');
+    };
+    $('btnPanelCenterStage').addEventListener('click', () => centerPanel('stage'));
+    $('btnPanelCenterRoom').addEventListener('click', () => centerPanel('room'));
+    $('btnScreenCenterStage').addEventListener('click', () => centerScreen('stage'));
+    $('btnScreenCenterRoom').addEventListener('click', () => centerScreen('room'));
+
     // ---- スクリーン
     $('btnAddScreen').addEventListener('click', () => {
       const id = U.nextId('SCR', window.screens);
@@ -256,7 +302,7 @@
     U.fillSelect('screenSelect', window.screens.map(s => ({ value: s.id, label: s.name + ' (W:' + s.w + ')' })), window.selectedScreenId);
     const s = selScreen();
     $('screenEditBox').style.opacity = s ? '1' : '0.4';
-    ['screenPreset', 'screenName', 'screenW', 'screenH', 'screenBottomZ', 'screenX', 'screenY', 'screenAngle']
+    ['btnScreenCenterStage', 'btnScreenCenterRoom', 'screenCenterY', 'screenPreset', 'screenName', 'screenW', 'screenH', 'screenBottomZ', 'screenX', 'screenY', 'screenAngle']
       .forEach(id => { $(id).disabled = !s; });
     if (!s) return;
     $('screenName').value = s.name;

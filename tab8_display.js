@@ -21,6 +21,12 @@
     ['showMonitorDims', 'モニターの寸法表示', '幅・高さの寸法線']
   ];
 
+  // 立面図に出すかどうかを選べるオブジェクト (バックパネル・スクリーン・ステージ・舞台什器・登壇者・客席は常に表示)
+  const SIDE_ITEMS = [
+    ['sidePodium', '司会台・演台'], ['sideLight', '照明'], ['sideSpeaker', 'スピーカー'],
+    ['sideOpe', 'オペ卓・制作物'], ['sideMonitor', '返しモニター']
+  ];
+
   // 書き出し (PNG/PDF) の見出しに入れる案件情報。社内共有などで不要なときは enabled をオフにする
   const META_FIELDS = [['project', '案件'], ['client', 'クライアント名'], ['venue', '会場'], ['date', '日付 (空欄=書き出し日)'], ['author', '作成者'], ['version', 'バージョン']];
   window.exportMeta = { enabled: true, project: '', client: '', venue: '', date: '', author: '', version: '', stamp: 'owl' };
@@ -34,6 +40,14 @@
           <label class="chk" style="display:flex; gap:6px; align-items:flex-start; padding:3px 0;">
             <input type="checkbox" data-ds="${k}">
             <span>${label}<span class="hint" style="display:block;">${hint}</span></span>
+          </label>`).join('')}
+      </div>
+      <div class="ui-group">
+        <div class="ui-group-title">📐 立面図に表示する物</div>
+        <div class="hint">バックパネル・スクリーン・ステージ・舞台什器・登壇者・客席は常に表示します。</div>
+        ${SIDE_ITEMS.map(([k, label]) => `
+          <label class="chk" style="display:flex; gap:6px; align-items:center; padding:3px 0;">
+            <input type="checkbox" data-ds="${k}"><span>${label}</span>
           </label>`).join('')}
       </div>
       <div class="ui-group">

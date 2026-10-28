@@ -88,6 +88,15 @@
           </div>
         </div>
         <div class="ui-row">
+          <div class="input-box">
+            <label>開き方向</label>
+            <select id="doorSwing">
+              <option value="in">内開き (会場の内側へ)</option>
+              <option value="out">外開き (会場の外側へ)</option>
+            </select>
+          </div>
+        </div>
+        <div class="ui-row">
           <div class="input-box"><label>開口幅 (W mm)</label><input type="number" id="doorWidth" step="100"></div>
           <div class="input-box"><label>設置する壁 (辺)</label><select id="doorWallSelect"></select></div>
         </div>
@@ -139,6 +148,7 @@
       if (!d) return null;
       d.name = $('doorName').value.trim() || '扉';
       d.type = $('doorType').value;
+      d.swing = $('doorSwing').value === 'out' ? 'out' : 'in';
       d.width = Math.max(300, parseFloat($('doorWidth').value) || 1000);
       d.edgeIndex = parseInt($('doorWallSelect').value, 10) || 0;
       d.offsetRatio = (parseFloat($('doorWallRatio').value) || 50) / 100;
@@ -146,7 +156,7 @@
       return d;
     };
     ['doorName', 'doorWallRatio'].forEach(id => $(id).addEventListener('input', () => { if (readDoor()) { refreshDoorSelect(); redraw(); } }));
-    ['doorName', 'doorType', 'doorWidth', 'doorWallSelect', 'doorWallRatio'].forEach(id =>
+    ['doorName', 'doorType', 'doorSwing', 'doorWidth', 'doorWallSelect', 'doorWallRatio'].forEach(id =>
       $(id).addEventListener('change', () => { if (readDoor()) { refreshDoorSelect(); redraw(); commit('扉の変更'); } }));
   }
 
@@ -221,17 +231,25 @@
     door.offsetRatio = bt;
   }
 
+  /** 辺の左手側(+y 側)が会場の内側なら 1、外側なら -1 (多角形の頂点の回り方で決まる) */
+  function inwardSign() {
+    const pts = window.room.points;
+    let a = 0;
+    for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; a += p.x * q.y - q.x * p.y; }
+    return a >= 0 ? 1 : -1;
+  }
+
   function addDoor() {
     const id = 'D' + (Math.max(0, ...window.doors.map(d => parseInt(String(d.id).replace(/\D/g, ''), 10) || 0)) + 1);
-    window.doors.push({ id, name: '扉 ' + (window.doors.length + 1), type: 'single_left', width: 1200, edgeIndex: 0, offsetRatio: 0.5, status: 'open' });
+    window.doors.push({ id, name: '扉 ' + (window.doors.length + 1), type: 'single_left', swing: 'in', width: 1200, edgeIndex: 0, offsetRatio: 0.5, status: 'open' });
     window.selectedDoorId = id;
     syncUI(); redraw(); commit('扉追加');
   }
 
   function deleteDoor() {
-    if (window.doors.length <= 1) { window.debugBox && window.debugBox.warn('扉は最低1つ必要です'); return; }
-    window.doors = window.doors.filter(d => d.id !== window.selectedDoorId);
-    window.selectedDoorId = window.doors[0].id;
+    if (!selectedDoor()) { window.debugBox && window.debugBox.warn('削除する扉がありません'); return; }
+    window.doors = window.doors.filter(d => d.id !== window.selectedDoorId);      // 0枚でもよい
+    window.selectedDoorId = window.doors.length ? window.doors[0].id : '';
     syncUI(); redraw(); commit('扉削除');
   }
 
@@ -250,8 +268,11 @@
 
   function syncDoorUI() {
     const d = selectedDoor();
-    if (!d || !$('doorName')) return;
+    if (!$('doorName')) return;
+    ['doorName', 'doorType', 'doorSwing', 'doorWidth', 'doorWallSelect', 'doorWallRatio', 'btnDeleteDoor'].forEach(id => { $(id).disabled = !d; });
+    if (!d) { $('doorName').value = ''; $('doorRatioDisplay').innerText = '-'; return; }      // 扉が0枚のとき
     $('doorName').value = d.name;
+    $('doorSwing').value = d.swing === 'out' ? 'out' : 'in';
     $('doorType').value = d.type;
     $('doorWidth').value = d.width;
     $('doorWallSelect').value = d.edgeIndex;
@@ -319,6 +340,7 @@
       ctx.save();
       ctx.translate(tf.x, tf.y);
       ctx.rotate(tf.angle);
+      ctx.scale(1, inwardSign() * (d.swing === 'out' ? -1 : 1));      // 開き弧の向き: 内開き=会場の内側 / 外開き=外側
       ctx.lineWidth = sel ? 45 : 30;
       if (d.type === 'closed') {
         ctx.strokeStyle = '#ef4444'; ctx.fillStyle = '#fee2e2';
@@ -416,8 +438,8 @@
         points: (Array.isArray(src.points) && src.points.length >= 3) ? src.points : rectPoints(w, d)
       };
     }
-    if (Array.isArray(data.doors) && data.doors.length) window.doors = clone(data.doors);
-    window.selectedDoorId = window.doors.some(d => d.id === data.selectedDoorId) ? data.selectedDoorId : window.doors[0].id;
+    if (Array.isArray(data.doors)) window.doors = clone(data.doors);        // 0枚も有効
+    window.selectedDoorId = window.doors.some(d => d.id === data.selectedDoorId) ? data.selectedDoorId : (window.doors[0] ? window.doors[0].id : '');
     normalize();
     syncUI();
   }
