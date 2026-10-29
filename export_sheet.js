@@ -222,6 +222,11 @@
     L.push(['ステージ', size(stage.w, stage.d, stage.h)]);
     panels.forEach(p => L.push([p.name || 'バックパネル', size(p.w, p.d, p.h)]));
     platforms.forEach(p => L.push([p.name || 'カメラ台', size(p.w, p.d, p.h || 0)]));
+    const reps = (window.tabCameraModule && window.tabCameraModule.getCameraReport && window.tabCameraModule.getCameraReport()) || [];
+    reps.forEach(r => L.push([r.name, 'H-FOV ' + r.hFov.toFixed(1) + '° / V-FOV ' + r.vFov.toFixed(1) + '° / f ' + r.focal.toFixed(1) + 'mm (センサー幅 ' + r.sensorW + 'mm) / レンズ全高 H' + mm(r.lensH) + (r.baseH ? ' (台 ' + mm(r.baseH) + ' + レンズ ' + mm(r.lensH - r.baseH) + ')' : '') +
+      ' / 被写体まで ' + (r.dist / 1000).toFixed(1) + 'm (距離はレンズ位置から)']));
+    const ds = window.displaySettings || {};
+    if (reps.length && ds.showSafeMargin !== false && ds.safePct > 0) L.push(['安全マージン', ds.safePct + '% (図面の橙色の破線 = 余白を残して収める目安の画角)']);
     const groups = (window.tabSeatsModule && window.tabSeatsModule.getGroups && window.tabSeatsModule.getGroups()) || [];
     if (seats.length && groups.length) {
       groups.forEach(gr => {

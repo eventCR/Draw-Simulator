@@ -23,11 +23,11 @@ window.CameraBase = (function () {
   'use strict';
 
   const CAMERA_MODELS = {
-    nx5r:     { name: 'Sony HXR-NX5R (光学20倍)', sensor: '1/2.8型 3CMOS', zoom: '光学20倍', minFov: 3.6, maxFov: 64.5 },
-    eng_std:  { name: 'ENG 2/3型 標準22倍', sensor: '2/3型', zoom: '光学22倍', minFov: 2.8, maxFov: 58.0 },
-    eng_ext:  { name: 'ENG 2/3型 (2x Ext)', sensor: '2/3型 (2x エクステンダー内蔵)', zoom: '光学44倍相当', minFov: 1.4, maxFov: 30.0 },
-    box_tele: { name: '大型ボックス40倍 (超望遠)', sensor: '2/3型', zoom: '光学40倍', minFov: 0.8, maxFov: 40.0 },
-    manual:   { name: 'マニュアル (広角〜望遠)', sensor: '汎用', zoom: 'マニュアル', minFov: 0.5, maxFov: 120.0 }
+    nx5r:     { name: 'Sony HXR-NX5R (光学20倍)', sensor: '1/2.8型 3CMOS', zoom: '光学20倍', sensorW: 5.57, minFov: 3.6, maxFov: 64.5 },
+    eng_std:  { name: 'ENG 2/3型 標準22倍', sensor: '2/3型', zoom: '光学22倍', sensorW: 9.59, minFov: 2.8, maxFov: 64.4 },     // 2/3型16:9・広角端 f=7.6mm → 約64.4°
+    eng_ext:  { name: 'ENG 2/3型 (2x Ext)', sensor: '2/3型 (2x エクステンダー内蔵)', zoom: '光学44倍相当', sensorW: 9.59, minFov: 1.4, maxFov: 30.0 },
+    box_tele: { name: '大型ボックス40倍 (超望遠)', sensor: '2/3型', zoom: '光学40倍', sensorW: 9.59, minFov: 0.8, maxFov: 40.0 },
+    manual:   { name: 'マニュアル (広角〜望遠)', sensor: '汎用', zoom: 'マニュアル', sensorW: 9.59, minFov: 0.5, maxFov: 120.0 }
   };
 
   const SHOT_TYPES = {
@@ -52,8 +52,17 @@ window.CameraBase = (function () {
       pan: 0, tilt: 0, fov: 40,
       shotType: 'stage_ff',
       framing: 'FF',
-      targetGuestId: ''
+      targetGuestId: '',
+      autoMargin: null,        // 自動ショットの左右余白 (mm)。null=既定 (単独 1150 / 集合 1400)
+      sensorW: null            // センサー幅 (mm)。null=機種の標準値。焦点距離(mm)の換算に使う
     }, overrides || {});
+  }
+
+  /** このカメラのセンサー幅 (mm)。個別指定があればそれ、なければ機種の標準値 */
+  function getSensorW(cam) {
+    if (cam && typeof cam.sensorW === 'number' && cam.sensorW > 0) return cam.sensorW;
+    const def = CAMERA_MODELS[cam && cam.model];
+    return (def && def.sensorW) || 9.59;
   }
 
   function makePlatform(id, name, overrides) {
@@ -97,7 +106,10 @@ window.CameraBase = (function () {
   // ---------------------------------------------------------------- 台 → カメラの位置を導出
   function syncFromPlatform(cam) {
     const p = getPlatformOf(cam);
-    if (!p) return;
+    if (!p) {                                    // 台なし: 床からの高さがそのままレンズ高
+      if (typeof cam.lensH === 'number') cam.lensAbove = cam.lensH;
+      return;
+    }
     cam.x = Math.round(p.x + (cam.ox || 0));
     cam.y = Math.round(p.y + (cam.oy || 0));
     cam.lensH = Math.round(p.h + (typeof cam.lensAbove === 'number' ? cam.lensAbove : DEFAULT_LENS_ABOVE));
@@ -116,9 +128,16 @@ window.CameraBase = (function () {
   /** カメラのレンズ高 (絶対) を設定する。台ありなら天板からの高さとして記録する */
   function setLensHeight(cam, z) {
     const p = getPlatformOf(cam);
-    if (p) cam.lensAbove = Math.max(0, z - p.h);
+    cam.lensAbove = Math.max(0, z - (p ? p.h : 0));
     cam.lensH = Math.round(z);
     if (p) syncFromPlatform(cam);
+  }
+
+  /** 台(または床)の上からのレンズ高を設定する。全高 = 台の高さ + この値 (台を変えれば自動で追従) */
+  function setLensAbove(cam, v) {
+    cam.lensAbove = Math.max(0, Math.round(v));
+    const p = getPlatformOf(cam);
+    cam.lensH = Math.round((p ? p.h : 0) + cam.lensAbove);
   }
 
   /** 台を動かす (載っているカメラも追従) */
@@ -139,18 +158,22 @@ window.CameraBase = (function () {
     syncAll();
   }
 
-  /** カメラを載せる台を切り替える (''=台なし)。レンズの絶対高さは変えない */
+  /** カメラを載せる台を切り替える (''=台なし)。台の上からのレンズ高(lensAbove)は保たれ、全高は台の高さ分だけ上下する */
   function assignCamera(cam, platformId) {
     if (!cam) return;
     const p = getPlatformById(platformId);
+    if (typeof cam.lensAbove !== 'number') {
+      const cur = getPlatformOf(cam);
+      cam.lensAbove = Math.max(0, (cam.lensH || DEFAULT_LENS_ABOVE) - (cur ? cur.h : 0));
+    }
     if (!p) {                                    // 台なし: 今の絶対位置のまま床置き三脚にする
       cam.platformId = '';
+      cam.lensH = Math.round(cam.lensAbove);
       return;
     }
-    const lens = cam.lensH || (p.h + DEFAULT_LENS_ABOVE);
     cam.platformId = p.id;
-    cam.lensAbove = lens - p.h >= 300 ? lens - p.h : DEFAULT_LENS_ABOVE;
     distributeOnPlatform(p.id);
+    syncFromPlatform(cam);
   }
 
   // ---------------------------------------------------------------- 追加 / 削除
@@ -275,10 +298,10 @@ window.CameraBase = (function () {
   }
 
   return {
-    CAMERA_MODELS, SHOT_TYPES, DEFAULT_LENS_ABOVE, makeCamera, makePlatform,
+    CAMERA_MODELS, SHOT_TYPES, DEFAULT_LENS_ABOVE, makeCamera, makePlatform, getSensorW,
     getAll, getById, getSelected, getSelectedId, setSelectedId,
     getPlatforms, getPlatformById, getPlatformOf, getSelectedPlatform, getSelectedPlatformId, setSelectedPlatformId, camerasOn,
-    syncFromPlatform, syncAll, moveCameraTo, setLensHeight, movePlatformTo, distributeOnPlatform, assignCamera,
+    syncFromPlatform, syncAll, moveCameraTo, setLensHeight, setLensAbove, movePlatformTo, distributeOnPlatform, assignCamera,
     addCamera, addPlatform, deleteSelected, deletePlatform, alignFromLastRow, alignFromRef,
     exportData, importData
   };

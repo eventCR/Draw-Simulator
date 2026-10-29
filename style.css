@@ -324,3 +324,13 @@ label.chk { display: flex; align-items: center; gap: 5px; font-size: 11px; curso
 #measure-panel .mp-btn.on { background: #fde68a; border-color: #f59e0b; font-weight: 700; }
 #measure-panel .mp-hint { color: #475569; font-size: 11px; }
 #measure-panel .mp-readout { color: #9a3412; font-weight: 700; font-size: 12px; }
+
+/* ---------- ファインダー別ウィンドウ (意見・デバッグBOXの上) ---------- */
+.finder-win { width: 320px; background: rgba(255,255,255,0.97); border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); overflow: hidden; font-size: 11px; z-index: 500; }
+.finder-head { display: flex; align-items: center; gap: 6px; padding: 4px 8px; background: #0f172a; color: #f8fafc; }
+.finder-title { font-weight: 700; font-size: 11px; white-space: nowrap; }
+.finder-cam { flex: 1; min-width: 0; font-size: 11px; padding: 1px 2px; }
+.finder-btns button { background: transparent; border: 1px solid #475569; color: #f8fafc; border-radius: 4px; cursor: pointer; font-size: 11px; padding: 0 6px; }
+.finder-body canvas { display: block; width: 100%; aspect-ratio: 16 / 9; background: #f6f8fb; }
+.finder-info { padding: 3px 8px; font-size: 10px; font-weight: 700; color: #334155; border-top: 1px solid #e2e8f0; }
+.finder-win.min .finder-body { display: none; }

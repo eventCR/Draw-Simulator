@@ -100,8 +100,209 @@
     };
   }
 
+  // ---------------------------------------------------------------- ファインダー (カメラ位置から見た16:9の映り)
+  /** ピンホール投影。aim の照準点へ向けたカメラから、ワールド座標 (x右, y手前, z上) を画面へ */
+  function makeProjector(cam, aim, W, H) {
+    let fx = aim.targetX - cam.x, fy = aim.targetY - cam.y, fz = aim.targetZ - (cam.lensH || 0);
+    const fl = Math.hypot(fx, fy, fz) || 1; fx /= fl; fy /= fl; fz /= fl;
+    let rx = -fy, ry = fx; const rl = Math.hypot(rx, ry) || 1; rx /= rl; ry /= rl;      // 画面の右 (水平)
+    const ux = fy * 0 - fz * ry, uy = fz * rx - fx * 0, uz = fx * ry - fy * rx;             // 上 = F × R
+    const f = (W / 2) / Math.tan(aim.fov * Math.PI / 360);
+    return (x, y, z) => {
+      const dx = x - cam.x, dy = y - cam.y, dz = z - (cam.lensH || 0);
+      const dep = dx * fx + dy * fy + dz * fz;
+      if (dep < 100) return null;                                       // カメラの後ろ・直近は描かない
+      return { x: W / 2 + f * (dx * rx + dy * ry) / dep, y: H / 2 - f * (dx * ux + dy * uy + dz * uz) / dep, dep, s: f / dep };
+    };
+  }
+
+  function boxCorners(cx, cy, w, d, ang, z0, z1) {
+    const a = (ang || 0) * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a), pts = [];
+    [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(q => {
+      const lx = q[0] * w / 2, ly = q[1] * d / 2;
+      pts.push([cx + lx * c - ly * sn, cy + lx * sn + ly * c]);
+    });
+    return { pts, z0, z1 };
+  }
+
+  /** ファインダー(別ウィンドウ)の描画。会場の物は客席・テーブル・什器・モニターまで全て立体で描く */
+  function renderFinder(cam, a) {
+    const cv = document.getElementById('finderCanvas');
+    if (!cv) return;
+    const win = document.getElementById('finder-win');
+    if (win && win.classList.contains('min')) return;
+    const g = cv.getContext('2d'), W = cv.width, H = cv.height;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.fillStyle = '#f6f8fb'; g.fillRect(0, 0, W, H);
+    const title = document.getElementById('finderTitle');
+    if (!cam || !a) { if (title) title.textContent = ''; g.fillStyle = '#64748b'; g.font = '14px sans-serif'; g.textAlign = 'center'; g.fillText('カメラがありません', W / 2, H / 2); return; }
+    if (title) title.textContent = cam.name + '  H-FOV ' + a.aim.fov.toFixed(1) + '° / f ' + CA.focalFromFov(a.aim.fov, CB.getSensorW(cam)).toFixed(1) + 'mm / レンズ高 ' + Math.round(cam.lensH) + 'mm';
+    const P = makeProjector(cam, a.aim, W, H);
+    // 地平線より下を床色に
+    const hz = P(cam.x + Math.cos(a.aim.hAngle) * 1e6, cam.y + Math.sin(a.aim.hAngle) * 1e6, cam.lensH || 0);
+    if (hz) { g.fillStyle = '#e8ecf2'; g.fillRect(0, Math.max(0, hz.y), W, H); }
+    const st = window.stage, items = [];
+    const inSt = (x, y) => window.isInsideStage(x, y);
+    const rot = (cx, cy, ang, lx, ly) => { const r = (ang || 0) * Math.PI / 180; return [cx + lx * Math.cos(r) - ly * Math.sin(r), cy + lx * Math.sin(r) + ly * Math.cos(r)]; };
+    const add = (cx, cy, w, d, ang, z0, z1, fill, stroke) => items.push(Object.assign(boxCorners(cx, cy, w, d, ang, z0, z1), { fill, stroke }));
+    add(st.x + st.w / 2, st.y + st.d / 2, st.w, st.d, 0, 0, st.h, '#ffffff', '#0f172a');
+    const fac = window.tabFacilityModule;
+    (window.panels || []).filter(p => p.enabled !== false).forEach(p => {
+      const pos = fac.getPanelPos(p), zr = fac.getPanelZRange(p);
+      add(pos.x + p.w / 2, pos.y + p.d / 2, p.w, p.d, 0, zr[0], zr[1], '#aab8cc', '#334155');
+    });
+    (window.screens || []).forEach(sc => add(sc.x, sc.y, sc.w, 100, sc.angle || 0, sc.bottomZ, sc.bottomZ + sc.h, '#e0f2fe', '#0284c7'));
+    (window.podiums || []).filter(p => p.enabled).forEach(p => {
+      const bz = inSt(p.x, p.y) ? st.h : 0;
+      add(p.x, p.y, p.w, p.d, p.angle || 0, bz, bz + p.h, '#dbeafe', '#2563eb');
+    });
+    (window.equipments || []).forEach(e => {
+      const bz = (inSt(e.x, e.y) ? st.h : 0) + (e.mountH || 0);
+      add(e.x, e.y, e.w, e.d, e.angle || 0, bz, bz + (e.h || 1000), '#e2e8f0', '#64748b');
+    });
+    // 舞台什器 (机・椅子・展示台)
+    (window.stageItems || []).forEach(it => {
+      const bz = it.baseType === 'floor' ? 0 : (it.baseType === 'stage' ? st.h : (inSt(it.x, it.y) ? st.h : 0));
+      const D = it.category !== 'chair' && it.shape === 'circle' ? it.w : (it.d || 450), H0 = it.h || 700;
+      if (it.category === 'table') add(it.x, it.y, it.w, D, it.angle || 0, bz + H0 - 50, bz + H0, '#f3e8d4', '#a07c4a');
+      else if (it.category === 'chair') {
+        add(it.x, it.y, it.w, D, it.angle || 0, bz + H0 - 40, bz + H0, '#e2e8f0', '#475569');
+        const bk = rot(it.x, it.y, it.angle, 0, D / 2 - 12);
+        add(bk[0], bk[1], it.w, 24, it.angle || 0, bz + H0, bz + H0 + (it.chairType === 'high' ? 220 : 320), '#cbd5e1', '#475569');
+      } else add(it.x, it.y, it.w, D, it.angle || 0, bz, bz + H0, '#fde68a', '#b45309');
+    });
+    // モニター
+    const MM = window.tabMonitorModule;
+    (window.monitors || []).forEach(m => {
+      const zr = MM && MM.getZRange ? MM.getZRange(m) : [0, (m.h || 600)];
+      const bw = m.baseW || 400, bd = m.baseD || 400;
+      if (m.stand === 'low') add(m.x, m.y, bw, bd, m.panAngle || 0, zr[0] + 40, zr[0] + 80, '#64748b', '#334155');
+      add(m.x, m.y, m.w || 600, 60, m.panAngle || 0, zr[1] - (m.h || 600), zr[1], '#0f172a', '#38bdf8');
+    });
+    // テーブル (客席側)
+    const TS = window.tabSeatsModule;
+    const tables = TS && TS.getTables ? TS.getTables() : [];
+    tables.forEach(tb => {
+      const bz = inSt(tb.x, tb.y) ? st.h : 0;
+      add(tb.x, tb.y, tb.w, tb.d, tb.angle || 0, bz + tb.h - 40, bz + tb.h, '#f3e8d4', '#a07c4a');
+      [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(q => {
+        const c = rot(tb.x, tb.y, tb.angle, q[0] * (tb.w / 2 - 40), q[1] * (tb.d / 2 - 40));
+        add(c[0], c[1], 40, 40, 0, bz, bz + tb.h - 40, '#d6c3a1', '#a07c4a');
+      });
+    });
+    const quad = (pts, fill, stroke) => {
+      g.beginPath(); pts.forEach((q, i) => i ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y)); g.closePath();
+      g.fillStyle = fill; g.fill(); g.strokeStyle = stroke; g.lineWidth = 1; g.stroke();
+    };
+    const drawables = [];
+    const addBoxes = (list) => list.forEach(b => {
+      const lo = b.pts.map(q => P(q[0], q[1], b.z0)), hi = b.pts.map(q => P(q[0], q[1], b.z1));
+      if (lo.some(v => !v) || hi.some(v => !v)) return;
+      const dep = (lo.concat(hi)).reduce((m, v) => m + v.dep, 0) / 8;
+      drawables.push({ dep, draw() {
+        quad(lo, b.fill, b.stroke);
+        for (let i = 0; i < 4; i++) quad([lo[i], lo[(i + 1) % 4], hi[(i + 1) % 4], hi[i]], b.fill, b.stroke);
+        quad(hi, b.fill, b.stroke);
+      } });
+    });
+    addBoxes(items);
+
+    // 登壇者
+    (a.aim ? guestTargets() : []).forEach(gu => {
+      const base = gu.baseZ || 0, top = base + gu.h, p0 = P(gu.x, gu.y, base), p1 = P(gu.x, gu.y, top - 110);
+      if (!p0 || !p1) return;
+      drawables.push({ dep: p0.dep, draw() {
+        g.fillStyle = 'rgba(30,64,175,0.9)';
+        const wd = 380 * p0.s;
+        g.beginPath(); g.moveTo(p0.x - wd / 2, p0.y); g.lineTo(p1.x - wd / 2, p1.y); g.lineTo(p1.x + wd / 2, p1.y); g.lineTo(p0.x + wd / 2, p0.y); g.closePath(); g.fill();
+        g.beginPath(); g.arc(p1.x, p1.y - 40 * p0.s, 105 * p0.s, 0, Math.PI * 2); g.fill();
+      } });
+    });
+
+    // 客席: 椅子 (座面・背もたれ・脚) + 着席した観客 (胴・頭)
+    const blocked = a.sim && a.sim.blockedSeats ? new Set(a.sim.blockedSeats.map(q => q.id)) : new Set();
+    const ch = window.chair || { w: 500, d: 500, h: 420, backH: 400 }, headZ = window.totalHeadZ || 1270;
+    (window.seats || []).forEach(sd => {
+      const bz = inSt(sd.x, sd.y) ? st.h : 0, bad = blocked.has(sd.id);
+      const body = bad ? '#fca5a5' : '#94a3b8', bodyLine = bad ? '#dc2626' : '#475569';
+      const seatBox = [];
+      const put = (lx, ly, w, d, z0, z1, fill, stroke) => { const c = rot(sd.x, sd.y, sd.angle, lx, ly); seatBox.push(Object.assign(boxCorners(c[0], c[1], w, d, sd.angle || 0, bz + z0, bz + z1), { fill, stroke })); };
+      [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(q => put(q[0] * (ch.w / 2 - 25), q[1] * (ch.d / 2 - 25), 36, 36, 0, ch.h - 40, '#64748b', '#334155'));   // 脚
+      put(0, 0, ch.w, ch.d, ch.h - 40, ch.h, '#cbd5e1', '#475569');                                   // 座面
+      put(0, ch.d / 2 - 15, ch.w, 30, ch.h, ch.h + ch.backH, '#cbd5e1', '#475569');                    // 背もたれ (後ろ側)
+      put(0, 40, Math.min(ch.w - 100, 380), 220, ch.h, headZ - 250, body, bodyLine);                   // 胴
+      addBoxes(seatBox);
+      const c = rot(sd.x, sd.y, sd.angle, 0, 40), hp = P(c[0], c[1], bz + headZ - 110);
+      if (hp) drawables.push({ dep: hp.dep, draw() {
+        g.fillStyle = bad ? '#ef4444' : '#64748b'; g.strokeStyle = bodyLine; g.lineWidth = 1;
+        g.beginPath(); g.arc(hp.x, hp.y, 105 * hp.s, 0, Math.PI * 2); g.fill(); g.stroke();
+      } });
+    });
+    drawables.sort((p, q) => q.dep - p.dep).forEach(d => d.draw());
+
+    // 安全マージン: 余白を k 倍見込んだときの実質の枠
+    if (window.displaySettings.showSafeMargin !== false) {
+      const pct = window.displaySettings.safePct == null ? 20 : window.displaySettings.safePct;
+      if (pct > 0) {
+        const k = 1 + pct / 100, w2 = W / k, h2 = H / k;
+        g.save(); g.setLineDash([8, 5]); g.strokeStyle = '#ea580c'; g.lineWidth = 2;
+        g.strokeRect((W - w2) / 2, (H - h2) / 2, w2, h2);
+        g.setLineDash([]); g.fillStyle = '#ea580c'; g.font = 'bold 13px sans-serif'; g.textAlign = 'left';
+        g.fillText('安全マージン ' + pct + '%', (W - w2) / 2 + 6, (H - h2) / 2 + 16);
+        g.restore();
+      }
+    }
+    g.strokeStyle = 'rgba(15,23,42,0.35)'; g.lineWidth = 1;             // 中心十字
+    g.beginPath(); g.moveTo(W / 2 - 10, H / 2); g.lineTo(W / 2 + 10, H / 2); g.moveTo(W / 2, H / 2 - 10); g.lineTo(W / 2, H / 2 + 10); g.stroke();
+  }
+
+  /** 書き出し用: 各カメラの画角・焦点距離 */
+  function getCameraReport() {
+    return CB.getAll().map(cam => {
+      const a = analyze(cam);
+      if (!a) return null;
+      const sw = CB.getSensorW(cam);
+      return { name: cam.name, model: (CB.CAMERA_MODELS[cam.model] || {}).name || cam.model, hFov: a.aim.fov, vFov: a.aim.vFov, focal: CA.focalFromFov(a.aim.fov, sw), sensorW: sw, lensH: cam.lensH, baseH: (CB.getPlatformOf(cam) || { h: 0 }).h, dist: a.aim.dist };
+    }).filter(Boolean);
+  }
+
+  // ---------------------------------------------------------------- ファインダー別ウィンドウ
+  let finderWired = false;
+  function syncFinderSelect() {
+    const sel = document.getElementById('finderCam'); if (!sel) return;
+    const all = CB.getAll(), cur = CB.getSelected();
+    const key = all.map(c => c.id + c.name).join('|');
+    if (sel.dataset.key !== key) { sel.innerHTML = all.map(c => '<option value="' + c.id + '">' + c.name + '</option>').join(''); sel.dataset.key = key; }
+    if (cur) sel.value = cur.id;
+  }
+  function wireFinderWindow() {
+    if (finderWired) return;
+    const win = document.getElementById('finder-win'); if (!win) return;
+    finderWired = true;
+    const cv = document.getElementById('finderCanvas');
+    const setSize = (w) => { win.style.width = w + 'px'; try { localStorage.setItem('finderW', String(w)); } catch (e) {} };
+    let w0 = 320; try { w0 = parseInt(localStorage.getItem('finderW'), 10) || 320; } catch (e) {}
+    setSize(w0);
+    try { if (localStorage.getItem('finderMin') === '1') win.classList.add('min'); } catch (e) {}
+    document.getElementById('finderCam').addEventListener('change', e => { CB.setSelectedId(e.target.value); updateUI(); redraw(); });
+    document.getElementById('finderMin').addEventListener('click', () => {
+      win.classList.toggle('min');
+      try { localStorage.setItem('finderMin', win.classList.contains('min') ? '1' : '0'); } catch (e) {}
+      document.getElementById('finderMin').textContent = win.classList.contains('min') ? '＋' : '－';
+      redraw();
+    });
+    document.getElementById('finderSize').addEventListener('click', () => {
+      const cur = parseInt(win.style.width, 10) || 320;
+      setSize(cur >= 640 ? 320 : (cur >= 480 ? 640 : 480));
+    });
+    document.getElementById('finderMin').textContent = win.classList.contains('min') ? '＋' : '－';
+    void cv;
+  }
+
   // ---------------------------------------------------------------- UI
   function buildUI(panel) {
+    wireFinderWindow();
+    if (!panel) return;
     if (!panel) return;
     const modelOpts = Object.keys(CB.CAMERA_MODELS).map(k => '<option value="' + k + '">' + CB.CAMERA_MODELS[k].name + '</option>').join('');
     panel.innerHTML = `
@@ -131,6 +332,23 @@
           </select></div></div>
         <div class="ui-row full hidden" id="camTargetGuestBox"><div class="input-box"><label>ターゲット登壇者</label><select id="camTargetGuest"></select></div></div>
         <div class="ui-row full"><div class="input-box"><label>画角 (FOV: <b id="fovValDisplay">22.7</b>°)</label><input type="range" id="camFovSlider" min="0.5" max="120" step="0.1"></div></div>
+        <div class="ui-row">
+          <div class="input-box"><label>焦点距離 f (mm)</label><input type="number" id="camFocal" step="0.5" min="1"></div>
+          <div class="input-box"><label>センサー幅 (mm)</label><input type="number" id="camSensorW" step="0.01" min="1"></div>
+          <div class="input-box" id="camAutoMarginBox"><label>左右の余白 (mm)</label><input type="number" id="camAutoMargin" step="50" min="0" placeholder="既定"></div>
+        </div>
+        <div class="hint" id="camFocalHint"></div>
+        <div class="hint">画角と距離は、カメラの<b>レンズ位置</b>を基準に計算します。焦点距離は「センサー幅 ÷ (2×tan(H-FOV÷2))」で換算します。自動ショットの左右余白は、空欄で既定値 (単独1150 / 集合1400mm) です。</div>
+      </div>
+
+      <div class="ui-group">
+        <div class="ui-group-title"><span>📺 ファインダー (16:9)</span></div>
+        <div class="hint">ファインダーは画面左下の別ウィンドウ (意見・デバッグBOXの上) に表示します。</div>
+        <div class="ui-row">
+          <label class="chk"><input type="checkbox" id="camSafe"> 安全マージンを表示</label>
+          <div class="input-box"><label>余白 (%)</label><input type="number" id="camSafePct" min="0" max="60" step="5"></div>
+        </div>
+        <div class="hint">カメラの位置から見た映りです (ステージ・パネル・登壇者・司会台・機材・テーブル・椅子と着席した客席すべて)。破線の内側は、現場のカメラマンが余白を残して収める目安です。平面図の扇形にも同じ破線が出ます。</div>
       </div>
 
       <div class="ui-group hidden" id="camAngleBox">
@@ -151,9 +369,13 @@
         <div class="ui-row">
           <div class="input-box"><label>位置 X (mm)</label><input type="number" id="camX" step="100"></div>
           <div class="input-box"><label>位置 Y (mm)</label><input type="number" id="camY" step="100"></div>
-          <div class="input-box"><label>レンズ全高 (Z mm)</label><input type="number" id="camH" step="50"></div>
+          <div class="input-box"><label>レンズ高 (台の上から mm)</label><input type="number" id="camAbove" step="50"></div>
         </div>
-        <div class="hint">台に載せたカメラは、台の上だけで動かせます。台を動かすと、載っているカメラ全部が一緒に動きます。台を変えても、レンズの高さは保たれます。</div>
+        <div class="ui-row">
+          <div class="input-box"><label>台の高さ (mm)</label><input type="number" id="camBaseH" disabled></div>
+          <div class="input-box"><label>レンズ全高 = 台 + レンズ (床から)</label><input type="number" id="camH" step="50"></div>
+        </div>
+        <div class="hint">台に載せたカメラは、台の上だけで動かせます。<b>レンズ高は台の天板からの高さ</b>で、台の高さが自動で加算されます (例: レンズ1800 + 台400 = 全高2200)。台を低くしたり外したりすると、その分だけ全高も下がります。全高を直接入力しても、台の上からの高さに換算されます。</div>
       </div>
 
       <div class="ui-group">
@@ -254,12 +476,41 @@
       $(id).addEventListener('change', () => commit('カメラ角度'));
     });
 
+    // 焦点距離・センサー幅・自動ショットの余白
+    const isManualShot = (c) => c.shotType === 'manual_angle' || c.shotType === 'manual';
+    $('camFocal').addEventListener('change', () => {
+      const c = sel(); if (!c || !isManualShot(c)) return;
+      const def = CB.CAMERA_MODELS[c.model] || { minFov: 0.5, maxFov: 120 };
+      const fov = CA.fovFromFocal(num('camFocal', 0), CB.getSensorW(c));
+      if (fov > 0) c.fov = Math.max(def.minFov, Math.min(def.maxFov, fov));
+      updateUI(); redraw(); commit('焦点距離');
+    });
+    $('camSensorW').addEventListener('change', () => {
+      const c = sel(); if (!c) return;
+      const v = num('camSensorW', 0), std = (CB.CAMERA_MODELS[c.model] || {}).sensorW;
+      c.sensorW = (v > 0 && v !== std) ? v : null;
+      updateUI(); redraw(); commit('センサー幅');
+    });
+    $('camAutoMargin').addEventListener('change', () => {
+      const c = sel(); if (!c) return;
+      const raw = $('camAutoMargin').value.trim();
+      c.autoMargin = raw === '' ? null : Math.max(0, num('camAutoMargin', 0));
+      updateUI(); redraw(); commit('自動ショットの余白');
+    });
+    $('camSafe').addEventListener('change', e => { window.displaySettings.showSafeMargin = e.target.checked; updateUI(true); redraw(); commit('安全マージン'); });
+    $('camSafePct').addEventListener('change', e => { window.displaySettings.safePct = Math.max(0, Math.min(60, num('camSafePct', 20))); updateUI(true); redraw(); commit('安全マージン'); });
+
     // カメラの絶対位置・レンズ高 (台に載っていれば台の上のずれ・天板からの高さとして記録される)
     ['camX', 'camY'].forEach(id => $(id).addEventListener('change', () => {
       const c = sel(); if (!c) return;
       CB.moveCameraTo(c, num('camX', c.x), num('camY', c.y));
       updateUI(); redraw(); commit('カメラ位置');
     }));
+    $('camAbove').addEventListener('change', () => {
+      const c = sel(); if (!c) return;
+      CB.setLensAbove(c, Math.max(0, num('camAbove', c.lensAbove)));
+      updateUI(); redraw(); commit('レンズ高');
+    });
     $('camH').addEventListener('change', () => {
       const c = sel(); if (!c) return;
       CB.setLensHeight(c, Math.max(0, num('camH', c.lensH)));
@@ -317,7 +568,7 @@
     }
 
     updatePlatformUI(light);
-    const ids = ['camSelect', 'camModel', 'camShotType', 'camFraming', 'camTargetGuest', 'camFovSlider', 'camPanSlider', 'camTiltSlider', 'camX', 'camY', 'camH', 'camPlatform', 'btnDeleteCam'];
+    const ids = ['camSelect', 'camModel', 'camShotType', 'camFraming', 'camTargetGuest', 'camFovSlider', 'camPanSlider', 'camTiltSlider', 'camX', 'camY', 'camAbove', 'camH', 'camPlatform', 'btnDeleteCam'];
     ids.forEach(id => { $(id).disabled = !cam; });
     $('camFovProj').checked = showFovProjection;
 
@@ -329,6 +580,7 @@
     $('camModel').value = cam.model || 'eng_std';
     $('camShotType').value = cam.shotType || 'stage_ff';
     $('camX').value = Math.round(cam.x); $('camY').value = Math.round(cam.y); $('camH').value = Math.round(cam.lensH);
+    { const bp = CB.getPlatformOf ? CB.getPlatformOf(cam) : null; $('camBaseH').value = bp ? Math.round(bp.h) : 0; $('camAbove').value = Math.round(typeof cam.lensAbove === 'number' ? cam.lensAbove : cam.lensH); }
     $('camPlatform').value = cam.platformId || '';
 
     const def = CB.CAMERA_MODELS[cam.model] || { minFov: 0.5, maxFov: 120 };
@@ -338,6 +590,17 @@
     fs.disabled = !manual;
     fs.title = manual ? '' : 'このショットタイプでは画角は自動計算されます';
     $('fovValDisplay').innerText = (Math.round(cam.fov * 10) / 10).toFixed(1);
+    const sw = CB.getSensorW(cam), fmm = CA.focalFromFov(cam.fov, sw);
+    $('camFocal').value = fmm ? Math.round(fmm * 10) / 10 : '';
+    $('camFocal').disabled = !manual;
+    $('camSensorW').value = sw;
+    $('camAutoMargin').value = typeof cam.autoMargin === 'number' ? cam.autoMargin : '';
+    $('camAutoMargin').placeholder = cam.shotType === 'guest_single' ? '既定 1150' : '既定 1400';
+    $('camAutoMarginBox').classList.toggle('hidden', cam.shotType !== 'guest_single' && cam.shotType !== 'guest_group');
+    $('camFocalHint').innerText = 'H-FOV ' + cam.fov.toFixed(1) + '° ≒ f ' + (fmm ? fmm.toFixed(1) : '-') + 'mm (センサー幅 ' + sw + 'mm)' + (manual ? '' : ' ※この値は自動計算です');
+    $('camSafe').checked = window.displaySettings.showSafeMargin !== false;
+    $('camSafePct').value = window.displaySettings.safePct != null ? window.displaySettings.safePct : 20;
+    renderFinder(cam, a); syncFinderSelect();
 
     const guestShot = cam.shotType === 'guest_single' || cam.shotType === 'guest_group';
     $('camFramingBox').classList.toggle('hidden', !guestShot);
@@ -442,6 +705,13 @@
         ctx.strokeStyle = warn ? '#dc2626' : (sel ? 'rgba(37,99,235,0.6)' : 'rgba(100,116,139,0.3)');
         ctx.lineWidth = sel ? 30 : 20;
         ctx.stroke();
+        if (sel && window.displaySettings.showSafeMargin !== false && (window.displaySettings.safePct == null ? 20 : window.displaySettings.safePct) > 0) {
+          const k = 1 + (window.displaySettings.safePct == null ? 20 : window.displaySettings.safePct) / 100;
+          const hs = Math.atan(Math.tan(half) / k);                       // 余白を残したときの実質の画角 (幅を k 倍で見込む)
+          ctx.save(); ctx.setLineDash([140, 90]); ctx.strokeStyle = 'rgba(234,88,12,0.8)'; ctx.lineWidth = 22;
+          [aim.hAngle - hs, aim.hAngle + hs].forEach(an => { ctx.beginPath(); ctx.moveTo(cam.x, cam.y); ctx.lineTo(cam.x + dist * Math.cos(an), cam.y + dist * Math.sin(an)); ctx.stroke(); });
+          ctx.restore();
+        }
         ctx.beginPath();
         ctx.moveTo(cam.x, cam.y); ctx.lineTo(aim.targetX, aim.targetY);
         ctx.strokeStyle = sim.isBlocked ? '#dc2626' : '#22c55e';
@@ -452,7 +722,7 @@
       drawCameraTop(ctx, cam.x, cam.y, a ? a.aim.hAngle : -Math.PI / 2, sel);
       ctx.restore();
       T(ctx, cam.name, cam.x, cam.y + pd / 2 + 350, { px: 11, bold: true });
-      if (a && sel) T(ctx, 'H-FOV ' + a.aim.fov.toFixed(1) + '° / パン ' + a.aim.panDeg.toFixed(1) + '°', cam.x, cam.y + pd / 2 + 750, { px: 10, color: '#7c3aed' });
+      if (a && sel) T(ctx, 'H-FOV ' + a.aim.fov.toFixed(1) + '° (f ' + CA.focalFromFov(a.aim.fov, CB.getSensorW(cam)).toFixed(1) + 'mm) / パン ' + a.aim.panDeg.toFixed(1) + '°', cam.x, cam.y + pd / 2 + 750, { px: 10, color: '#7c3aed' });
     });
   }
 
@@ -540,7 +810,7 @@
       const pHi = mid(thetaC + halfV, 7000), pLo = mid(thetaC - halfV, 7000);
       T(ctx, '上端 ' + sgn(dHi), pHi.x, pHi.y - 350, { px: 11, bold: true, color: '#0369a1' });
       T(ctx, '下端 ' + sgn(dLo), pLo.x, pLo.y + 350, { px: 11, bold: true, color: sim.isBlocked ? '#dc2626' : '#1d4ed8' });
-      T(ctx, 'V-FOV ' + aim.vFov.toFixed(1) + '° (H-FOV ' + aim.fov.toFixed(1) + '°)', cam.y, -lensH - 1100, { px: 12, bold: true, color: '#7c3aed' });
+      T(ctx, 'V-FOV ' + aim.vFov.toFixed(1) + '° (H-FOV ' + aim.fov.toFixed(1) + '° / f ' + CA.focalFromFov(aim.fov, CB.getSensorW(cam)).toFixed(1) + 'mm)', cam.y, -lensH - 1100, { px: 12, bold: true, color: '#7c3aed' });
 
       // 構図: 映すべき範囲 (頭頂〜切る位置) のブラケット
       if (aim.frame) {
@@ -620,7 +890,9 @@
 
   window.tabCameraModule = {
     init: buildUI, drawTop, drawSide, hitTest, onGrab, handleDrag, exportData, importData,
-    updateUI, analyze, getBlockedSeatIds, getFovSelection,
+    updateUI, analyze, getBlockedSeatIds, getFovSelection, getCameraReport,
+    drawOverlay() { const c = CB.getSelected(); renderFinder(c, c ? analyze(c) : null); },
+    refreshFinder() { const c = CB.getSelected(); syncFinderSelect(); renderFinder(c, c ? analyze(c) : null); },
     setFovProjection(v) { showFovProjection = !!v; updateUI(true); redraw(); },
     isFovProjection: () => showFovProjection
   };

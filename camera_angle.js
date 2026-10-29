@@ -107,7 +107,9 @@ window.CameraAngle = (function () {
         const minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
         tx = (minX + maxX) / 2;
         ty = ys.reduce((a, v) => a + v, 0) / ys.length;
-        reqWidth = (maxX - minX) + (c.shotType === 'guest_single' ? 900 : 1200);
+        // 左右の余白: 現場のカメラマンは身振り手振りの分を残すので、ぎりぎりには寄せない (既定 単独1150 / 集合1400mm)
+        const autoMargin = (typeof c.autoMargin === 'number' && c.autoMargin >= 0) ? c.autoMargin : (c.shotType === 'guest_single' ? 1150 : 1400);
+        reqWidth = (maxX - minX) + autoMargin;
 
         // 構図 (FF 全身 / KS 膝上 / WS 腰上 / BS 胸上 / CU 肩上) から、映すべき高さの範囲を決める
         const fr = FRAMING[c.framing] ? c.framing : 'FF';
@@ -313,5 +315,16 @@ window.CameraAngle = (function () {
     return s;
   }
 
-  return { FRAMING, framingRange, getVerticalFov, calculateAimAndFov, checkHeadBlock, simulateHeightClearance, generateSummaryText };
+  /** 水平画角 (度) → 焦点距離 (mm)。sensorW=センサー幅 (mm) */
+  function focalFromFov(hFovDeg, sensorW) {
+    if (!hFovDeg || hFovDeg <= 0 || !sensorW) return 0;
+    return sensorW / (2 * Math.tan(hFovDeg * RAD / 2));
+  }
+  /** 焦点距離 (mm) → 水平画角 (度) */
+  function fovFromFocal(f, sensorW) {
+    if (!f || f <= 0 || !sensorW) return 0;
+    return 2 * Math.atan(sensorW / (2 * f)) * DEG;
+  }
+
+  return { FRAMING, focalFromFov, fovFromFocal, framingRange, getVerticalFov, calculateAimAndFov, checkHeadBlock, simulateHeightClearance, generateSummaryText };
 })();

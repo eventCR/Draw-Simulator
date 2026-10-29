@@ -108,6 +108,17 @@
 
   <!-- HUD: 左下 意見BOX + 凡例 -->
   <div class="hud-left-bottom">
+    <div id="finder-win" class="finder-win">
+      <div class="finder-head">
+        <span class="finder-title">📺 ファインダー</span>
+        <select id="finderCam" class="finder-cam"></select>
+        <span class="finder-btns"><button type="button" id="finderSize" title="サイズ切替">⤢</button><button type="button" id="finderMin" title="最小化">－</button></span>
+      </div>
+      <div class="finder-body">
+        <canvas id="finderCanvas" width="960" height="540"></canvas>
+        <div id="finderTitle" class="finder-info"></div>
+      </div>
+    </div>
     <div id="debug-box" class="debug-box">
       <div class="debug-box-header">
         <span class="debug-box-title">🛠️ 意見・デバッグBOX</span>
