@@ -211,6 +211,12 @@
     const { caps, boxes } = buildBlockers();
     const L = [cam.x, cam.y, cam.lensH || 0];
     const people = G.list.map(g => ({ g, parts: G.getBodyParts(g) }));
+    (window.podiums || []).filter(pd => pd.enabled && pd.hasHost).forEach(pd => {     // 司会者・演台の登壇者 (演台の後ろに立つ)
+      const a = (pd.angle || 0) * Math.PI / 180, off = pd.d / 2 + 200;
+      const bx = pd.x + 0 * Math.cos(a) - (-off) * Math.sin(a), by = pd.y + 0 * Math.sin(a) + (-off) * Math.cos(a);
+      people.push({ g: { id: pd.id + '_host', name: (pd.name || '演台') + (pd.type === 'lecture' ? 'の登壇者' : 'の司会者') },
+        parts: G.makeBodyParts({ x: bx, y: by, z0: window.isInsideStage(pd.x, pd.y) ? window.stage.h : 0, type: 'standing', h: 1600, yaw: pd.angle || 0 }) });
+    });
     return people.map(pp => {
       const others = [];
       people.forEach(o => { if (o !== pp) o.parts.forEach(q => others.push({ a: q.a, b: q.b, r: q.r })); });
@@ -236,10 +242,11 @@
 
   /** 被りの要約: [{ name: '登壇者 1', hidden: ['左膝', ...], partial: [...] }] */
   function summarizeOcclusion(vis) {
+    const cap = (a) => a.length > 6 ? a.slice(0, 5).concat('…他' + (a.length - 5) + '部位') : a;
     return vis.map(v => ({
       name: v.guest.name || v.guest.id,
-      hidden: v.parts.filter(p => p.vis < 0.4).map(p => p.name),
-      partial: v.parts.filter(p => p.vis >= 0.4 && p.vis < 1).map(p => p.name)
+      hidden: cap(v.parts.filter(p => p.vis < 0.4).map(p => p.name)),
+      partial: cap(v.parts.filter(p => p.vis >= 0.4 && p.vis < 1).map(p => p.name))
     }));
   }
 
@@ -308,30 +315,52 @@
         add(c[0], c[1], 40, 40, 0, bz, bz + tb.h - 40, '#d6c3a1', '#a07c4a');
       });
     });
-    const quad = (pts, fill, stroke) => {
-      g.beginPath(); pts.forEach((q, i) => i ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y)); g.closePath();
-      g.fillStyle = fill; g.fill(); g.strokeStyle = stroke; g.lineWidth = 1; g.stroke();
-    };
+    const LX = cam.x, LY = cam.y, LZ = cam.lensH || 0;
+    const dist3 = (x, y, z) => Math.hypot(x - LX, y - LY, z - LZ);
     const drawables = [];
+    /** 面 (4点) を 1000mm 以下のタイルに割り、タイルごとに奥行き順で描く (大きな面が人や物の上に被らないように) */
+    const addFace = (c4, fill, stroke, bias, tile) => {
+      const lenU = Math.hypot(c4[1][0] - c4[0][0], c4[1][1] - c4[0][1], c4[1][2] - c4[0][2]);
+      const lenV = Math.hypot(c4[3][0] - c4[0][0], c4[3][1] - c4[0][1], c4[3][2] - c4[0][2]);
+      const nu = tile ? Math.max(1, Math.min(14, Math.ceil(lenU / 800))) : 1, nv = tile ? Math.max(1, Math.min(14, Math.ceil(lenV / 800))) : 1;
+      const at = (u, v) => [0, 1, 2].map(i => (c4[0][i] * (1 - u) + c4[1][i] * u) * (1 - v) + (c4[3][i] * (1 - u) + c4[2][i] * u) * v);
+      for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+        const q = [at(i / nu, j / nv), at((i + 1) / nu, j / nv), at((i + 1) / nu, (j + 1) / nv), at(i / nu, (j + 1) / nv)];
+        const pr = q.map(v => P(v[0], v[1], v[2]));
+        if (pr.some(v => !v)) continue;
+        const cx = (q[0][0] + q[2][0]) / 2, cy = (q[0][1] + q[2][1]) / 2, cz = (q[0][2] + q[2][2]) / 2;
+        const edges = [j === 0, i === nu - 1, j === nv - 1, i === 0];       // 面の外周だけ線を引く
+        drawables.push({ dep: dist3(cx, cy, cz) + (bias || 0), draw() {
+          g.beginPath(); pr.forEach((v, k) => k ? g.lineTo(v.x, v.y) : g.moveTo(v.x, v.y)); g.closePath();
+          g.fillStyle = fill; g.fill(); g.strokeStyle = fill; g.lineWidth = 1; g.stroke();
+          g.strokeStyle = stroke; g.lineWidth = 1.2;
+          for (let e = 0; e < 4; e++) if (edges[e]) { g.beginPath(); g.moveTo(pr[e].x, pr[e].y); g.lineTo(pr[(e + 1) % 4].x, pr[(e + 1) % 4].y); g.stroke(); }
+        } });
+      }
+    };
     const addBoxes = (list) => list.forEach(b => {
-      const lo = b.pts.map(q => P(q[0], q[1], b.z0)), hi = b.pts.map(q => P(q[0], q[1], b.z1));
-      if (lo.some(v => !v) || hi.some(v => !v)) return;
-      const dep = (lo.concat(hi)).reduce((m, v) => m + v.dep, 0) / 8;
-      drawables.push({ dep, draw() {
-        quad(lo, b.fill, b.stroke);
-        for (let i = 0; i < 4; i++) quad([lo[i], lo[(i + 1) % 4], hi[(i + 1) % 4], hi[i]], b.fill, b.stroke);
-        quad(hi, b.fill, b.stroke);
-      } });
+      const n = b.pts.length, cxy = [b.pts.reduce((m, q) => m + q[0], 0) / n, b.pts.reduce((m, q) => m + q[1], 0) / n];
+      const big = Math.max(Math.hypot(b.pts[1][0] - b.pts[0][0], b.pts[1][1] - b.pts[0][1]), Math.hypot(b.pts[3][0] - b.pts[0][0], b.pts[3][1] - b.pts[0][1]), b.z1 - b.z0) > 1000;
+      const lo = (q, z) => [q[0], q[1], z];
+      // 上面・下面
+      if (LZ > b.z1) addFace([lo(b.pts[0], b.z1), lo(b.pts[1], b.z1), lo(b.pts[2], b.z1), lo(b.pts[3], b.z1)], b.fill, b.stroke, big ? 400 : 0, big);
+      if (LZ < b.z0) addFace([lo(b.pts[0], b.z0), lo(b.pts[1], b.z0), lo(b.pts[2], b.z0), lo(b.pts[3], b.z0)], b.fill, b.stroke, 0, big);
+      for (let i = 0; i < 4; i++) {                                         // 側面: カメラ側を向いているものだけ
+        const A = b.pts[i], B = b.pts[(i + 1) % 4];
+        const mx = (A[0] + B[0]) / 2, my = (A[1] + B[1]) / 2, nx = mx - cxy[0], ny = my - cxy[1];
+        if (nx * (LX - mx) + ny * (LY - my) <= 0) continue;
+        addFace([lo(A, b.z0), lo(B, b.z0), lo(B, b.z1), lo(A, b.z1)], b.fill, b.stroke, 0, big);
+      }
     });
     addBoxes(items);
 
-    // 登壇者: 部位ごとのカプセル (頭・首・胸・腹・腰・腕・太もも・膝・すね・足)
+    // 登壇者・司会者: 部位ごとのカプセル (頭・首・胸・腹・腰・腕・太もも・膝・すね・足) と、座っている椅子
     const visList = computeGuestVisibility(cam), PAL = { head: '#e0b48f', neck: '#e0b48f', chest: '#1e40af', belly: '#1e3a8a', hip: '#1e293b', arm: '#2563eb', thigh: '#334155', knee: '#475569', shin: '#334155', foot: '#111827' };
     visList.forEach(v => v.parts.forEach(pt => {
       const A = P(pt.a[0], pt.a[1], pt.a[2]), B = P(pt.b[0], pt.b[1], pt.b[2]);
       if (!A || !B) return;
       const col = PAL[pt.grp] || '#1e40af';
-      drawables.push({ dep: (A.dep + B.dep) / 2 - 1, draw() {
+      drawables.push({ dep: dist3((pt.a[0] + pt.b[0]) / 2, (pt.a[1] + pt.b[1]) / 2, (pt.a[2] + pt.b[2]) / 2), draw() {
         g.lineCap = 'round'; g.lineJoin = 'round';
         g.strokeStyle = 'rgba(15,23,42,0.55)'; g.lineWidth = Math.max(1.5, pt.r * 2 * A.s + 1.5);
         g.beginPath(); g.moveTo(A.x, A.y); g.lineTo(B.x, B.y); g.stroke();
@@ -339,6 +368,16 @@
         g.beginPath(); g.moveTo(A.x, A.y); g.lineTo(B.x, B.y); g.stroke();
       } });
     }));
+    const gchairs = [];
+    (window.tabGuestsModule ? window.tabGuestsModule.list : []).filter(gu => gu.type !== 'standing').forEach(gu => {
+      const bz = inSt(gu.x, gu.y) ? st.h : 0, sh = gu.h, high = gu.type === 'high_chair';
+      const put = (lx, ly, w, d, z0, z1, fill, stroke) => gchairs.push(Object.assign(boxCorners(gu.x + lx, gu.y + ly, w, d, 0, bz + z0, bz + z1), { fill, stroke }));
+      [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(q => put(q[0] * 190, q[1] * 190, 40, 40, 0, sh - 40, '#64748b', '#334155'));      // 脚
+      put(0, 0, 460, 460, sh - 40, sh, '#cbd5e1', '#475569');                                                                          // 座面
+      put(0, -225, 460, 30, sh, sh + (high ? 220 : 340), '#cbd5e1', '#475569');                                                        // 背もたれ (登壇者は+Y向き)
+      if (high) put(0, 190, 420, 30, sh * 0.45, sh * 0.45 + 30, '#94a3b8', '#475569');                                                  // 足掛け
+    });
+    addBoxes(gchairs);
 
     // 客席: 椅子 (座面・背もたれ・脚) + 着席した観客 (胴・頭)
     const blocked = a.sim && a.sim.blockedSeats ? new Set(a.sim.blockedSeats.map(q => q.id)) : new Set();
@@ -354,7 +393,7 @@
       put(0, 40, Math.min(ch.w - 100, 380), 220, ch.h, headZ - 250, body, bodyLine);                   // 胴
       addBoxes(seatBox);
       const c = rot(sd.x, sd.y, sd.angle, 0, 40), hp = P(c[0], c[1], bz + headZ - 110);
-      if (hp) drawables.push({ dep: hp.dep, draw() {
+      if (hp) drawables.push({ dep: dist3(c[0], c[1], bz + headZ - 110), draw() {
         g.fillStyle = bad ? '#ef4444' : '#64748b'; g.strokeStyle = bodyLine; g.lineWidth = 1;
         g.beginPath(); g.arc(hp.x, hp.y, 105 * hp.s, 0, Math.PI * 2); g.fill(); g.stroke();
       } });

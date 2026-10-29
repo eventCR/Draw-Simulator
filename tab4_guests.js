@@ -232,9 +232,11 @@
    * 登壇者の身体を部位ごとに返す。座標は絶対 (x,y,z mm)、客席側(+Y)を向いている。
    * 各部位: { id, name, a:[x,y,z], b:[x,y,z], r }  ※ a==b なら球。
    */
-  function getBodyParts(g) {
-    const x = g.x, y = g.y, z0 = baseZ(g), S = window.seatedTorsoH;
-    const standing = g.type === 'standing';
+  function getBodyParts(g) { return makeBodyParts({ x: g.x, y: g.y, z0: baseZ(g), type: g.type, h: g.h, yaw: 0 }); }
+  /** opts: { x, y, z0 (足元/ステージ面), type ('standing'|椅子), h (立位=身長 / 着席=座面高), yaw (向き。0=+Y向き) } */
+  function makeBodyParts(o) {
+    const x = o.x, y = o.y, z0 = o.z0, S = window.seatedTorsoH, g = { h: o.h };
+    const standing = o.type === 'standing';
     const Hs = standing ? g.h : S / 0.52;                // 立ったときの身長
     const k = Hs / 1700;
     const P = [];
@@ -275,6 +277,11 @@
         add('shin' + sd, t + 'すね', [hx, y + thighL, kz - 10 * k], [hx, y + thighL + 50 * k, kz - shinL], 55, 'shin');
         add('foot' + sd, t + '足', [hx, y + thighL + 50 * k, kz - shinL - 15 * k], [hx, y + thighL + 200 * k, kz - shinL - 30 * k], 48, 'foot');
       });
+    }
+    if (o.yaw) {                                         // 向きを回す (司会台の向きなど)
+      const r = o.yaw * Math.PI / 180, c = Math.cos(r), sn = Math.sin(r);
+      const rt = (q) => { const lx = q[0] - x, ly = q[1] - y; return [x + lx * c - ly * sn, y + lx * sn + ly * c, q[2]]; };
+      P.forEach(q => { q.a = rt(q.a); q.b = rt(q.b); });
     }
     return P;
   }
@@ -356,7 +363,7 @@
     get selectedId() { return selectedId; },
     getBaseZ: baseZ,
     getHeadTopZ: (g) => baseZ(g) + headTopRel(g),
-    getAimTargets, getBodyParts
+    getAimTargets, getBodyParts, makeBodyParts
   };
   window.Core.register('guests', window.tabGuestsModule, { order: 60 });
 })();
