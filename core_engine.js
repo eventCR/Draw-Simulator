@@ -68,6 +68,7 @@
     sideSpeaker: true,       // スピーカー
     sideOpe: true,           // オペ卓・制作物
     sideMonitor: true,       // 返しモニター
+    exportFinder: true,     // 書き出しにカメラごとのファインダーを付ける
     showSafeMargin: true,   // カメラの安全マージン (余白の目安) を扇形・ファインダーに表示
     safePct: 20             // 余白の割合 (%)
   }, window.displaySettings || {});

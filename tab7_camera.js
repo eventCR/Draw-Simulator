@@ -244,15 +244,15 @@
   }
 
   /** ファインダー(別ウィンドウ)の描画。会場の物は客席・テーブル・什器・モニターまで全て立体で描く */
-  function renderFinder(cam, a) {
-    const cv = document.getElementById('finderCanvas');
+  function renderFinder(cam, a, target) {
+    const cv = target || document.getElementById('finderCanvas');
     if (!cv) return;
     const win = document.getElementById('finder-win');
-    if (win && win.classList.contains('min')) return;
+    if (!target && win && win.classList.contains('min')) return;
     const g = cv.getContext('2d'), W = cv.width, H = cv.height;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.fillStyle = '#f6f8fb'; g.fillRect(0, 0, W, H);
-    const title = document.getElementById('finderTitle');
+    const title = target ? null : document.getElementById('finderTitle');
     if (!cam || !a) { if (title) title.textContent = ''; g.fillStyle = '#64748b'; g.font = '14px sans-serif'; g.textAlign = 'center'; g.fillText('カメラがありません', W / 2, H / 2); return; }
     if (title) title.textContent = cam.name + '  H-FOV ' + a.aim.fov.toFixed(1) + '° / f ' + CA.focalFromFov(a.aim.fov, CB.getSensorW(cam)).toFixed(1) + 'mm / レンズ高 ' + Math.round(cam.lensH) + 'mm';
     const P = makeProjector(cam, a.aim, W, H);
@@ -392,6 +392,21 @@
     }
     g.strokeStyle = 'rgba(15,23,42,0.35)'; g.lineWidth = 1;             // 中心十字
     g.beginPath(); g.moveTo(W / 2 - 10, H / 2); g.lineTo(W / 2 + 10, H / 2); g.moveTo(W / 2, H / 2 - 10); g.lineTo(W / 2, H / 2 + 10); g.stroke();
+  }
+
+  /** 書き出し用: 全カメラのファインダー画像 [{ name, canvas }] */
+  function renderFinderImages(w) {
+    const out = [];
+    CB.getAll().forEach(cam => {
+      const a = analyze(cam);
+      if (!a) return;
+      const cv = document.createElement('canvas');
+      cv.width = w || 960; cv.height = Math.round((w || 960) * 9 / 16);
+      renderFinder(cam, a, cv);
+      const f = CA.focalFromFov(a.aim.fov, CB.getSensorW(cam));
+      out.push({ name: cam.name, canvas: cv, info: 'H-FOV ' + a.aim.fov.toFixed(1) + '° / f ' + f.toFixed(1) + 'mm / レンズ全高 ' + Math.round(cam.lensH) + 'mm' });
+    });
+    return out;
   }
 
   /** 書き出し用: 各カメラの画角・焦点距離 */
@@ -1028,7 +1043,7 @@
 
   window.tabCameraModule = {
     init: buildUI, drawTop, drawSide, hitTest, onGrab, handleDrag, exportData, importData,
-    updateUI, analyze, getBlockedSeatIds, getFovSelection, getCameraReport, computeGuestVisibility,
+    updateUI, analyze, getBlockedSeatIds, getFovSelection, getCameraReport, computeGuestVisibility, renderFinderImages,
     drawOverlay() { const c = CB.getSelected(); renderFinder(c, c ? analyze(c) : null); },
     refreshFinder() { const c = CB.getSelected(); syncFinderSelect(); renderFinder(c, c ? analyze(c) : null); },
     setFovProjection(v) { showFovProjection = !!v; updateUI(true); redraw(); },

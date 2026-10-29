@@ -262,9 +262,19 @@
       const headH = Math.round(fs * (metaOn ? 5.4 : 3.6)), lineH = Math.round(fs * 1.7);
       const STAMPS = { owl: 'アウル株式会社', owlcraft: 'アウルクラフト株式会社' };
       const stampText = STAMPS[meta.stamp] || '';
+      const ds0 = window.displaySettings || {};
+      const fins = (ds0.exportFinder !== false && window.tabCameraModule && window.tabCameraModule.renderFinderImages) ? window.tabCameraModule.renderFinderImages(960) : [];
+      let finTile = 0, finCols = 0, finH = 0;
+      if (fins.length) {
+        finCols = Math.min(fins.length, 3);
+        finTile = Math.floor((sheetW - fs * 2 - fs * (finCols - 1)) / finCols);
+        finTile = Math.min(finTile, Math.round(sheetW * (fins.length === 1 ? 0.5 : 0.32)));
+        const rowsN = Math.ceil(fins.length / finCols);
+        finH = Math.round(fs * 2.4 + rowsN * (finTile * 9 / 16 + fs * 2.6));
+      }
       const tableH = Math.max(Math.round(fs * 1.6 + rows.length * lineH + fs * 1.2), stampText ? Math.round(fs * 5.2) : 0);
       const out = document.createElement('canvas');
-      out.width = sheetW; out.height = headH + H + tableH;
+      out.width = sheetW; out.height = headH + H + finH + tableH;
       const g = out.getContext('2d');
       g.fillStyle = '#ffffff'; g.fillRect(0, 0, out.width, out.height);
       // 題名
@@ -302,8 +312,24 @@
       try { (view === 'top' ? annotateTop : annotateSide)(g, pen, T, D); }
       catch (e) { window.Core.log('寸法の記載でエラー: ' + e.message, 'error'); }
       g.restore();
+      // ファインダー (カメラ位置から見た映り)
+      if (fins.length) {
+        const fy0 = headH + H + fs * 0.4;
+        g.strokeStyle = '#cbd5e1'; g.lineWidth = 2; g.beginPath(); g.moveTo(fs, fy0); g.lineTo(sheetW - fs, fy0); g.stroke();
+        g.textBaseline = 'middle'; g.textAlign = 'left'; g.font = 'bold ' + fs + 'px ' + FONT; g.fillStyle = INK;
+        g.fillText('ファインダー (カメラ位置から見た映り / 破線 = 安全マージン)', fs, fy0 + fs * 1.1);
+        const tileH = finTile * 9 / 16;
+        fins.forEach((f, i) => {
+          const col = i % finCols, row = Math.floor(i / finCols);
+          const fx = fs + col * (finTile + fs), fy = fy0 + fs * 2.4 + row * (tileH + fs * 2.6);
+          g.drawImage(f.canvas, fx, fy, finTile, tileH);
+          g.strokeStyle = '#475569'; g.lineWidth = Math.max(2, fs / 10); g.strokeRect(fx, fy, finTile, tileH);
+          g.font = 'bold ' + Math.round(fs * 0.9) + 'px ' + FONT; g.fillStyle = INK; g.textAlign = 'left';
+          g.fillText(f.name + '   ' + f.info, fx, fy + tileH + fs * 1.0);
+        });
+      }
       // 寸法表
-      const ty = headH + H + fs * 0.4;
+      const ty = headH + H + finH + fs * 0.4;
       g.strokeStyle = '#cbd5e1'; g.lineWidth = 2; g.beginPath(); g.moveTo(fs, ty); g.lineTo(sheetW - fs, ty); g.stroke();
       g.textBaseline = 'middle';
       rows.forEach((r, i) => {
