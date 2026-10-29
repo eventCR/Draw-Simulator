@@ -226,6 +226,59 @@
     }
   }
 
+
+  // ---------------------------------------------------------------- 身体モデル (部位ごとのカプセル)
+  /**
+   * 登壇者の身体を部位ごとに返す。座標は絶対 (x,y,z mm)、客席側(+Y)を向いている。
+   * 各部位: { id, name, a:[x,y,z], b:[x,y,z], r }  ※ a==b なら球。
+   */
+  function getBodyParts(g) {
+    const x = g.x, y = g.y, z0 = baseZ(g), S = window.seatedTorsoH;
+    const standing = g.type === 'standing';
+    const Hs = standing ? g.h : S / 0.52;                // 立ったときの身長
+    const k = Hs / 1700;
+    const P = [];
+    const add = (id, name, a, b, r, grp) => P.push({ id, name, a, b: b || a, r: r * k, grp: grp || id });
+    const hr = 88;
+    if (standing) {
+      const top = z0 + Hs, hz = (f) => z0 + Hs * f;
+      add('head', '頭', [x, y + 15 * k, top - hr * k], null, hr, 'head');
+      add('neck', '首', [x, y, top - 2 * hr * k + 10 * k], [x, y, hz(0.835)], 48, 'neck');
+      add('chest', '胸', [x, y, hz(0.79)], [x, y, hz(0.65)], 140, 'chest');
+      add('belly', '腹', [x, y, hz(0.62)], [x, y, hz(0.54)], 128, 'belly');
+      add('hip', '腰', [x, y, hz(0.52)], [x, y, hz(0.49)], 135, 'hip');
+      [-1, 1].forEach(sd => {
+        const t = sd < 0 ? '左' : '右';
+        add('uarm' + sd, t + '上腕', [x + sd * 185 * k, y, hz(0.80)], [x + sd * 210 * k, y, hz(0.62)], 46, 'arm');
+        add('farm' + sd, t + '前腕', [x + sd * 210 * k, y, hz(0.62)], [x + sd * 220 * k, y + 30 * k, hz(0.46)], 40, 'arm');
+        add('hand' + sd, t + '手', [x + sd * 222 * k, y + 35 * k, hz(0.44)], null, 38, 'arm');
+        add('thigh' + sd, t + '太もも', [x + sd * 95 * k, y, hz(0.50)], [x + sd * 95 * k, y, hz(0.29)], 75, 'thigh');
+        add('knee' + sd, t + '膝', [x + sd * 95 * k, y + 5 * k, hz(0.285)], null, 66, 'knee');
+        add('shin' + sd, t + 'すね', [x + sd * 95 * k, y, hz(0.27)], [x + sd * 95 * k, y, hz(0.05)], 55, 'shin');
+        add('foot' + sd, t + '足', [x + sd * 95 * k, y, hz(0.03)], [x + sd * 95 * k, y + 150 * k, hz(0.02)], 48, 'foot');
+      });
+    } else {
+      const st = z0 + g.h, top = st + S, sz = (f) => st + S * f;
+      add('head', '頭', [x, y + 15 * k, top - hr * k], null, hr, 'head');
+      add('neck', '首', [x, y, top - 2 * hr * k + 10 * k], [x, y, sz(0.83)], 48, 'neck');
+      add('chest', '胸', [x, y, sz(0.78)], [x, y, sz(0.52)], 140, 'chest');
+      add('belly', '腹', [x, y, sz(0.46)], [x, y, sz(0.22)], 128, 'belly');
+      add('hip', '腰', [x, y - 10 * k, st + 75 * k], [x, y + 20 * k, st + 75 * k], 135, 'hip');
+      const thighL = 0.245 * Hs, shinL = 0.245 * Hs;
+      [-1, 1].forEach(sd => {
+        const t = sd < 0 ? '左' : '右', hx = x + sd * 95 * k, kz = st + 90 * k;
+        add('uarm' + sd, t + '上腕', [x + sd * 185 * k, y, sz(0.78)], [x + sd * 200 * k, y + 20 * k, sz(0.36)], 46, 'arm');
+        add('farm' + sd, t + '前腕', [x + sd * 200 * k, y + 20 * k, sz(0.36)], [x + sd * 130 * k, y + 250 * k, st + 170 * k], 40, 'arm');
+        add('hand' + sd, t + '手', [x + sd * 120 * k, y + 275 * k, st + 165 * k], null, 38, 'arm');
+        add('thigh' + sd, t + '太もも', [hx, y, st + 85 * k], [hx, y + thighL, kz], 75, 'thigh');
+        add('knee' + sd, t + '膝', [hx, y + thighL, kz], null, 66, 'knee');
+        add('shin' + sd, t + 'すね', [hx, y + thighL, kz - 10 * k], [hx, y + thighL + 50 * k, kz - shinL], 55, 'shin');
+        add('foot' + sd, t + '足', [hx, y + thighL + 50 * k, kz - shinL - 15 * k], [hx, y + thighL + 200 * k, kz - shinL - 30 * k], 48, 'foot');
+      });
+    }
+    return P;
+  }
+
   function drawSide(ctx) {
     const T = window.Core.drawText;
     const fov = (window.tabCameraModule && window.tabCameraModule.getFovSelection) ? window.tabCameraModule.getFovSelection() : null;
@@ -237,12 +290,16 @@
       ctx.strokeStyle = ctx.fillStyle = col(g);
       ctx.lineJoin = ctx.lineCap = 'round';
 
-      if (g.type === 'standing') {
-        drawPersonRight(ctx, px, py, g.h, false, 0);
-      } else {
-        (g.type === 'high_chair' ? drawChairHigh : drawChairLow)(ctx, px, py, g.h);
-        drawPersonRight(ctx, px, py - g.h, window.seatedTorsoH, true, g.h);
-      }
+      if (g.type !== 'standing') (g.type === 'high_chair' ? drawChairHigh : drawChairLow)(ctx, px, py, g.h);
+      const parts = getBodyParts(g).sort((a, b) => a.a[0] - b.a[0]);     // 左側(奥)から手前へ
+      const line = (pt, w, c) => {
+        ctx.strokeStyle = ctx.fillStyle = c; ctx.lineWidth = Math.max(w, 2);
+        ctx.beginPath(); ctx.moveTo(pt.a[1], -pt.a[2]); ctx.lineTo(pt.b[1], -pt.b[2]); ctx.stroke();
+        if (pt.a === pt.b || (pt.a[1] === pt.b[1] && pt.a[2] === pt.b[2])) { ctx.beginPath(); ctx.arc(pt.a[1], -pt.a[2], w / 2, 0, Math.PI * 2); ctx.fill(); }
+      };
+      parts.forEach(pt => { line(pt, pt.r * 2 + 16, '#ffffff'); line(pt, pt.r * 2, col(g)); });
+      const hd = parts.find(q => q.id === 'head');
+      if (hd) { ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(hd.a[1] + hd.r * 0.55, -hd.a[2] + hd.r * 0.05, hd.r * 0.16, 0, Math.PI * 2); ctx.fill(); }   // 目 (向き)
       ctx.restore();
       T(ctx, g.name + ' (H:' + g.h + (bz > 0 ? ' 台+' + bz : '') + ')', px, py - headTopRel(g) - 250, { px: 11, bold: true, color: col(g) });
     });
@@ -299,7 +356,7 @@
     get selectedId() { return selectedId; },
     getBaseZ: baseZ,
     getHeadTopZ: (g) => baseZ(g) + headTopRel(g),
-    getAimTargets
+    getAimTargets, getBodyParts
   };
   window.Core.register('guests', window.tabGuestsModule, { order: 60 });
 })();

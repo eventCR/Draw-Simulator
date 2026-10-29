@@ -125,6 +125,124 @@
     return { pts, z0, z1 };
   }
 
+
+  // ---------------------------------------------------------------- 登壇者の部位ごとの被り判定
+  const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  /** 線分 p1-q1 と 線分 p2-q2 の最短距離 */
+  function segSegDist(p1, q1, p2, q2) {
+    const d1 = sub3(q1, p1), d2 = sub3(q2, p2), r = sub3(p1, p2);
+    const a = dot3(d1, d1), e = dot3(d2, d2), f = dot3(d2, r);
+    let sN, tN;
+    const cl = (v) => Math.max(0, Math.min(1, v));
+    if (a <= 1e-9 && e <= 1e-9) { sN = 0; tN = 0; }
+    else if (a <= 1e-9) { sN = 0; tN = cl(f / e); }
+    else {
+      const c = dot3(d1, r);
+      if (e <= 1e-9) { tN = 0; sN = cl(-c / a); }
+      else {
+        const b = dot3(d1, d2), den = a * e - b * b;
+        sN = den > 1e-9 ? cl((b * f - c * e) / den) : 0;
+        tN = (b * sN + f) / e;
+        if (tN < 0) { tN = 0; sN = cl(-c / a); } else if (tN > 1) { tN = 1; sN = cl((b - c) / a); }
+      }
+    }
+    const c1 = [p1[0] + d1[0] * sN, p1[1] + d1[1] * sN, p1[2] + d1[2] * sN], c2 = [p2[0] + d2[0] * tN, p2[1] + d2[1] * tN, p2[2] + d2[2] * tN];
+    return Math.hypot(c1[0] - c2[0], c1[1] - c2[1], c1[2] - c2[2]);
+  }
+  /** 線分 A→B が 回転した直方体に当たるか (中心 cx,cy / 幅 w 奥行 d / 角度 / z0..z1) */
+  function segHitsBox(A, B, bx) {
+    const r = -(bx.ang || 0) * Math.PI / 180, c = Math.cos(r), sn = Math.sin(r);
+    const loc = (P) => [(P[0] - bx.cx) * c - (P[1] - bx.cy) * sn, (P[0] - bx.cx) * sn + (P[1] - bx.cy) * c, P[2]];
+    const a = loc(A), b = loc(B), lo = [-bx.w / 2, -bx.d / 2, bx.z0], hi = [bx.w / 2, bx.d / 2, bx.z1];
+    let t0 = 0, t1 = 1;
+    for (let i = 0; i < 3; i++) {
+      const dd = b[i] - a[i];
+      if (Math.abs(dd) < 1e-9) { if (a[i] < lo[i] || a[i] > hi[i]) return false; }
+      else {
+        let u = (lo[i] - a[i]) / dd, v = (hi[i] - a[i]) / dd;
+        if (u > v) { const t = u; u = v; v = t; }
+        t0 = Math.max(t0, u); t1 = Math.min(t1, v);
+        if (t0 > t1) return false;
+      }
+    }
+    return true;
+  }
+
+  /** 視線を遮る物 (客席の人・椅子、テーブル、舞台什器、司会台、機材、モニター) を球/カプセル/箱にして返す */
+  function buildBlockers() {
+    const st = window.stage, inSt = (x, y) => window.isInsideStage(x, y);
+    const caps = [], boxes = [];
+    const ch = window.chair || { w: 500, d: 500, h: 420, backH: 400 }, headZ = window.totalHeadZ || 1270;
+    (window.seats || []).forEach(sd => {
+      const bz = inSt(sd.x, sd.y) ? st.h : 0, r = (sd.angle || 0) * Math.PI / 180;
+      const bx = sd.x - 40 * Math.sin(r), by = sd.y + 40 * Math.cos(r);           // 胴は椅子の背側へ寄る
+      caps.push({ a: [bx, by, bz + headZ - 110], b: [bx, by, bz + headZ - 110], r: 105 });                    // 頭
+      caps.push({ a: [bx, by, bz + ch.h + 40], b: [bx, by, bz + headZ - 260], r: 140 });                      // 胴
+      const bk = [sd.x - (ch.d / 2 - 15) * Math.sin(r), sd.y + (ch.d / 2 - 15) * Math.cos(r)];
+      boxes.push({ cx: bk[0], cy: bk[1], w: ch.w, d: 30, ang: sd.angle || 0, z0: bz + ch.h, z1: bz + ch.h + ch.backH });   // 背もたれ
+    });
+    const TS = window.tabSeatsModule;
+    ((TS && TS.getTables && TS.getTables()) || []).forEach(tb => {
+      const bz = inSt(tb.x, tb.y) ? st.h : 0;
+      boxes.push({ cx: tb.x, cy: tb.y, w: tb.w, d: tb.d, ang: tb.angle || 0, z0: bz + tb.h - 40, z1: bz + tb.h });
+    });
+    (window.stageItems || []).forEach(it => {
+      const bz = it.baseType === 'floor' ? 0 : (it.baseType === 'stage' ? st.h : (inSt(it.x, it.y) ? st.h : 0));
+      const D = it.category !== 'chair' && it.shape === 'circle' ? it.w : (it.d || 450), H0 = it.h || 700;
+      if (it.category === 'table') boxes.push({ cx: it.x, cy: it.y, w: it.w, d: D, ang: it.angle || 0, z0: bz + H0 - 50, z1: bz + H0 });
+      else if (it.category === 'chair') boxes.push({ cx: it.x, cy: it.y, w: it.w, d: D, ang: it.angle || 0, z0: bz + H0 - 40, z1: bz + H0 });
+      else boxes.push({ cx: it.x, cy: it.y, w: it.w, d: D, ang: it.angle || 0, z0: bz, z1: bz + H0 });
+    });
+    (window.podiums || []).filter(p => p.enabled).forEach(p => { const bz = inSt(p.x, p.y) ? st.h : 0; boxes.push({ cx: p.x, cy: p.y, w: p.w, d: p.d, ang: p.angle || 0, z0: bz, z1: bz + p.h }); });
+    (window.equipments || []).forEach(e => { const bz = (inSt(e.x, e.y) ? st.h : 0) + (e.mountH || 0); boxes.push({ cx: e.x, cy: e.y, w: e.w, d: e.d, ang: e.angle || 0, z0: bz, z1: bz + (e.h || 1000) }); });
+    const MM = window.tabMonitorModule;
+    (window.monitors || []).forEach(m => {
+      const zr = MM && MM.getZRange ? MM.getZRange(m) : [0, m.h || 600];
+      boxes.push({ cx: m.x, cy: m.y, w: m.w || 600, d: 60, ang: m.panAngle || 0, z0: zr[1] - (m.h || 600), z1: zr[1] });
+    });
+    return { caps, boxes };
+  }
+
+  /** 各登壇者の部位が、カメラのレンズから見えているか。vis = 見えている割合 (0〜1) */
+  function computeGuestVisibility(cam) {
+    const G = window.tabGuestsModule;
+    if (!cam || !G || !G.getBodyParts) return [];
+    const { caps, boxes } = buildBlockers();
+    const L = [cam.x, cam.y, cam.lensH || 0];
+    const people = G.list.map(g => ({ g, parts: G.getBodyParts(g) }));
+    return people.map(pp => {
+      const others = [];
+      people.forEach(o => { if (o !== pp) o.parts.forEach(q => others.push({ a: q.a, b: q.b, r: q.r })); });
+      pp.parts.forEach(pt => {
+        const n = (pt.a[0] === pt.b[0] && pt.a[1] === pt.b[1] && pt.a[2] === pt.b[2]) ? 1 : 5;
+        let seen = 0;
+        for (let i = 0; i < n; i++) {
+          const t = n === 1 ? 0.5 : (i + 0.5) / n;
+          const T = [pt.a[0] + (pt.b[0] - pt.a[0]) * t, pt.a[1] + (pt.b[1] - pt.a[1]) * t, pt.a[2] + (pt.b[2] - pt.a[2]) * t];
+          const dv = sub3(T, L), dl = Math.hypot(dv[0], dv[1], dv[2]) || 1, cut = Math.min(pt.r + 60, dl * 0.5);
+          const E = [T[0] - dv[0] / dl * cut, T[1] - dv[1] / dl * cut, T[2] - dv[2] / dl * cut];     // 部位自身の手前で止める
+          let blocked = false;
+          for (let k = 0; k < caps.length && !blocked; k++) { const c = caps[k]; if (segSegDist(L, E, c.a, c.b) < c.r) blocked = true; }
+          for (let k = 0; k < others.length && !blocked; k++) { const c = others[k]; if (segSegDist(L, E, c.a, c.b) < c.r) blocked = true; }
+          for (let k = 0; k < boxes.length && !blocked; k++) if (segHitsBox(L, E, boxes[k])) blocked = true;
+          if (!blocked) seen++;
+        }
+        pt.vis = seen / n;
+      });
+      return { guest: pp.g, parts: pp.parts };
+    });
+  }
+
+  /** 被りの要約: [{ name: '登壇者 1', hidden: ['左膝', ...], partial: [...] }] */
+  function summarizeOcclusion(vis) {
+    return vis.map(v => ({
+      name: v.guest.name || v.guest.id,
+      hidden: v.parts.filter(p => p.vis < 0.4).map(p => p.name),
+      partial: v.parts.filter(p => p.vis >= 0.4 && p.vis < 1).map(p => p.name)
+    }));
+  }
+
   /** ファインダー(別ウィンドウ)の描画。会場の物は客席・テーブル・什器・モニターまで全て立体で描く */
   function renderFinder(cam, a) {
     const cv = document.getElementById('finderCanvas');
@@ -207,17 +325,20 @@
     });
     addBoxes(items);
 
-    // 登壇者
-    (a.aim ? guestTargets() : []).forEach(gu => {
-      const base = gu.baseZ || 0, top = base + gu.h, p0 = P(gu.x, gu.y, base), p1 = P(gu.x, gu.y, top - 110);
-      if (!p0 || !p1) return;
-      drawables.push({ dep: p0.dep, draw() {
-        g.fillStyle = 'rgba(30,64,175,0.9)';
-        const wd = 380 * p0.s;
-        g.beginPath(); g.moveTo(p0.x - wd / 2, p0.y); g.lineTo(p1.x - wd / 2, p1.y); g.lineTo(p1.x + wd / 2, p1.y); g.lineTo(p0.x + wd / 2, p0.y); g.closePath(); g.fill();
-        g.beginPath(); g.arc(p1.x, p1.y - 40 * p0.s, 105 * p0.s, 0, Math.PI * 2); g.fill();
+    // 登壇者: 部位ごとのカプセル (頭・首・胸・腹・腰・腕・太もも・膝・すね・足)
+    const visList = computeGuestVisibility(cam), PAL = { head: '#e0b48f', neck: '#e0b48f', chest: '#1e40af', belly: '#1e3a8a', hip: '#1e293b', arm: '#2563eb', thigh: '#334155', knee: '#475569', shin: '#334155', foot: '#111827' };
+    visList.forEach(v => v.parts.forEach(pt => {
+      const A = P(pt.a[0], pt.a[1], pt.a[2]), B = P(pt.b[0], pt.b[1], pt.b[2]);
+      if (!A || !B) return;
+      const col = PAL[pt.grp] || '#1e40af';
+      drawables.push({ dep: (A.dep + B.dep) / 2 - 1, draw() {
+        g.lineCap = 'round'; g.lineJoin = 'round';
+        g.strokeStyle = 'rgba(15,23,42,0.55)'; g.lineWidth = Math.max(1.5, pt.r * 2 * A.s + 1.5);
+        g.beginPath(); g.moveTo(A.x, A.y); g.lineTo(B.x, B.y); g.stroke();
+        g.strokeStyle = col; g.lineWidth = Math.max(1, pt.r * 2 * A.s - 1);
+        g.beginPath(); g.moveTo(A.x, A.y); g.lineTo(B.x, B.y); g.stroke();
       } });
-    });
+    }));
 
     // 客席: 椅子 (座面・背もたれ・脚) + 着席した観客 (胴・頭)
     const blocked = a.sim && a.sim.blockedSeats ? new Set(a.sim.blockedSeats.map(q => q.id)) : new Set();
@@ -239,6 +360,23 @@
       } });
     });
     drawables.sort((p, q) => q.dep - p.dep).forEach(d => d.draw());
+
+    // 被っている部位に目印 (赤い×) と一覧
+    const occ = summarizeOcclusion(visList), lines = [];
+    visList.forEach((v, i) => {
+      v.parts.forEach(pt => {
+        if (pt.vis >= 1) return;
+        const M = P((pt.a[0] + pt.b[0]) / 2, (pt.a[1] + pt.b[1]) / 2, (pt.a[2] + pt.b[2]) / 2);
+        if (!M) return;
+        g.strokeStyle = pt.vis < 0.4 ? '#dc2626' : '#f59e0b'; g.lineWidth = 2;
+        const q = 5; g.beginPath(); g.moveTo(M.x - q, M.y - q); g.lineTo(M.x + q, M.y + q); g.moveTo(M.x + q, M.y - q); g.lineTo(M.x - q, M.y + q); g.stroke();
+      });
+      const o = occ[i];
+      if (o.hidden.length || o.partial.length) lines.push(o.name + ': ' + (o.hidden.length ? '被り ' + o.hidden.join('・') : '') + (o.partial.length ? (o.hidden.length ? ' / ' : '') + '一部 ' + o.partial.join('・') : ''));
+    });
+    g.font = 'bold 12px sans-serif'; g.textAlign = 'left';
+    const msgs = lines.length ? lines : ['登壇者の全身が見えています'];
+    msgs.forEach((t, i) => { const y = H - 8 - (msgs.length - 1 - i) * 15; g.fillStyle = 'rgba(255,255,255,0.8)'; g.fillRect(4, y - 12, g.measureText(t).width + 8, 15); g.fillStyle = lines.length ? '#b91c1c' : '#15803d'; g.fillText(t, 8, y); });
 
     // 安全マージン: 余白を k 倍見込んだときの実質の枠
     if (window.displaySettings.showSafeMargin !== false) {
@@ -262,7 +400,7 @@
       const a = analyze(cam);
       if (!a) return null;
       const sw = CB.getSensorW(cam);
-      return { name: cam.name, model: (CB.CAMERA_MODELS[cam.model] || {}).name || cam.model, hFov: a.aim.fov, vFov: a.aim.vFov, focal: CA.focalFromFov(a.aim.fov, sw), sensorW: sw, lensH: cam.lensH, baseH: (CB.getPlatformOf(cam) || { h: 0 }).h, dist: a.aim.dist };
+      return { name: cam.name, model: (CB.CAMERA_MODELS[cam.model] || {}).name || cam.model, hFov: a.aim.fov, vFov: a.aim.vFov, focal: CA.focalFromFov(a.aim.fov, sw), sensorW: sw, lensH: cam.lensH, baseH: (CB.getPlatformOf(cam) || { h: 0 }).h, dist: a.aim.dist, occlusion: summarizeOcclusion(computeGuestVisibility(cam)).filter(o => o.hidden.length || o.partial.length) };
     }).filter(Boolean);
   }
 
@@ -890,7 +1028,7 @@
 
   window.tabCameraModule = {
     init: buildUI, drawTop, drawSide, hitTest, onGrab, handleDrag, exportData, importData,
-    updateUI, analyze, getBlockedSeatIds, getFovSelection, getCameraReport,
+    updateUI, analyze, getBlockedSeatIds, getFovSelection, getCameraReport, computeGuestVisibility,
     drawOverlay() { const c = CB.getSelected(); renderFinder(c, c ? analyze(c) : null); },
     refreshFinder() { const c = CB.getSelected(); syncFinderSelect(); renderFinder(c, c ? analyze(c) : null); },
     setFovProjection(v) { showFovProjection = !!v; updateUI(true); redraw(); },
