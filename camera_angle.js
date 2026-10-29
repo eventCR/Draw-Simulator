@@ -78,7 +78,11 @@ window.CameraAngle = (function () {
     const st = stage || { x: 0, y: 0, w: 10000, d: 3000, h: 800 };
     const gs = asArray(guests);
     const defs = models || {};
-    const modelDef = defs[c.model] || defs.nx5r || { minFov: 2.0, maxFov: 60.0 };
+    let modelDef = defs[c.model] || defs.nx5r || { minFov: 2.0, maxFov: 60.0 };
+    if (modelDef.fWide && modelDef.fTele) {            // 実レンズの焦点距離の範囲から、このカメラの画角の限界を出す
+      const sw = c.sensorW > 0 ? c.sensorW : modelDef.sensorW;
+      modelDef = Object.assign({}, modelDef, { minFov: fovFromFocal(modelDef.fTele, sw), maxFov: fovFromFocal(modelDef.fWide, sw) });
+    }
 
     let tx = st.x + st.w / 2;
     let ty = st.y + st.d;

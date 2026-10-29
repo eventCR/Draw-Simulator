@@ -642,8 +642,8 @@
     $('camModel').addEventListener('change', e => {
       const c = sel(); if (!c) return;
       c.model = e.target.value;
-      const def = CB.CAMERA_MODELS[c.model];
-      if (def) c.fov = Math.max(def.minFov, Math.min(def.maxFov, c.fov || 22.7));
+      const def = CB.getFovLimits(c);
+      c.fov = Math.max(def.minFov, Math.min(def.maxFov, c.fov || 22.7));
       updateUI(); redraw(); commit('カメラ機種');
     });
     $('camShotType').addEventListener('change', e => {
@@ -672,9 +672,12 @@
     const isManualShot = (c) => c.shotType === 'manual_angle' || c.shotType === 'manual';
     $('camFocal').addEventListener('change', () => {
       const c = sel(); if (!c || !isManualShot(c)) return;
-      const def = CB.CAMERA_MODELS[c.model] || { minFov: 0.5, maxFov: 120 };
+      const def = CB.getFovLimits(c);
       const fov = CA.fovFromFocal(num('camFocal', 0), CB.getSensorW(c));
-      if (fov > 0) c.fov = Math.max(def.minFov, Math.min(def.maxFov, fov));
+      if (fov > 0) {
+        c.fov = Math.max(def.minFov, Math.min(def.maxFov, fov));
+        if (def.real && (fov < def.minFov - 0.005 || fov > def.maxFov + 0.005)) window.debugBox && window.debugBox.warn('この機種のズーム範囲 (f ' + def.fWide + '〜' + def.fTele + 'mm) を超えるため、限界に丸めました');
+      }
       updateUI(); redraw(); commit('焦点距離');
     });
     $('camSensorW').addEventListener('change', () => {
@@ -775,7 +778,7 @@
     { const bp = CB.getPlatformOf ? CB.getPlatformOf(cam) : null; $('camBaseH').value = bp ? Math.round(bp.h) : 0; $('camAbove').value = Math.round(typeof cam.lensAbove === 'number' ? cam.lensAbove : cam.lensH); }
     $('camPlatform').value = cam.platformId || '';
 
-    const def = CB.CAMERA_MODELS[cam.model] || { minFov: 0.5, maxFov: 120 };
+    const def = CB.getFovLimits(cam);
     const manual = cam.shotType === 'manual_angle' || cam.shotType === 'manual';
     const fs = $('camFovSlider');
     fs.min = def.minFov; fs.max = def.maxFov; fs.value = cam.fov;
@@ -785,11 +788,13 @@
     const sw = CB.getSensorW(cam), fmm = CA.focalFromFov(cam.fov, sw);
     $('camFocal').value = fmm ? Math.round(fmm * 10) / 10 : '';
     $('camFocal').disabled = !manual;
+    if (def.real) { $('camFocal').min = def.fWide; $('camFocal').max = def.fTele; } else { $('camFocal').min = 1; $('camFocal').removeAttribute('max'); }
     $('camSensorW').value = sw;
     $('camAutoMargin').value = typeof cam.autoMargin === 'number' ? cam.autoMargin : '';
     $('camAutoMargin').placeholder = cam.shotType === 'guest_single' ? '既定 1150' : '既定 1400';
     $('camAutoMarginBox').classList.toggle('hidden', cam.shotType !== 'guest_single' && cam.shotType !== 'guest_group');
-    $('camFocalHint').innerText = 'H-FOV ' + cam.fov.toFixed(1) + '° ≒ f ' + (fmm ? fmm.toFixed(1) : '-') + 'mm (センサー幅 ' + sw + 'mm)' + (manual ? '' : ' ※この値は自動計算です');
+    $('camFocalHint').innerText = 'H-FOV ' + cam.fov.toFixed(1) + '° ≒ f ' + (fmm ? fmm.toFixed(1) : '-') + 'mm (センサー幅 ' + sw + 'mm)' + (manual ? '' : ' ※この値は自動計算です') +
+      (def.real ? '\n実機のズーム範囲: f ' + def.fWide + '〜' + def.fTele + 'mm (H-FOV ' + def.maxFov.toFixed(1) + '°〜' + def.minFov.toFixed(2) + '°)' + (cam.fov >= def.maxFov - 0.05 ? ' ← 広角端' : (cam.fov <= def.minFov + 0.005 ? ' ← 望遠端 (これ以上寄れません)' : '')) : '\n※「マニュアル」機種は実機の制限がありません。現実に合わせるなら機種を選んでください');
     $('camSafe').checked = window.displaySettings.showSafeMargin !== false;
     $('camSafePct').value = window.displaySettings.safePct != null ? window.displaySettings.safePct : 20;
     renderFinder(cam, a); syncFinderSelect();

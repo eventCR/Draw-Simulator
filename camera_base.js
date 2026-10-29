@@ -22,13 +22,33 @@
 window.CameraBase = (function () {
   'use strict';
 
+  /**
+   * 機種ごとの実際のレンズ仕様。fWide / fTele = 広角端・望遠端の焦点距離 (mm)。
+   * minFov / maxFov (H-FOV) は 焦点距離とセンサー幅から計算する: FOV = 2·atan(センサー幅 ÷ 2f)
+   *   NX5R  : 光学20倍 (35mm換算 28.8〜576mm ≒ 実焦点 4.46〜89.2mm)。クリアイメージズームを使うと40倍相当まで電子的に寄れる
+   *   ENG   : 2/3型 22倍 (例 7.6〜167.2mm)。2x エクステンダー ON で 15.2〜334.4mm
+   *   ボックス: 2/3型 40倍 (例 14〜560mm)
+   */
   const CAMERA_MODELS = {
-    nx5r:     { name: 'Sony HXR-NX5R (光学20倍)', sensor: '1/2.8型 3CMOS', zoom: '光学20倍', sensorW: 5.57, minFov: 3.6, maxFov: 64.5 },
-    eng_std:  { name: 'ENG 2/3型 標準22倍', sensor: '2/3型', zoom: '光学22倍', sensorW: 9.59, minFov: 2.8, maxFov: 64.4 },     // 2/3型16:9・広角端 f=7.6mm → 約64.4°
-    eng_ext:  { name: 'ENG 2/3型 (2x Ext)', sensor: '2/3型 (2x エクステンダー内蔵)', zoom: '光学44倍相当', sensorW: 9.59, minFov: 1.4, maxFov: 30.0 },
-    box_tele: { name: '大型ボックス40倍 (超望遠)', sensor: '2/3型', zoom: '光学40倍', sensorW: 9.59, minFov: 0.8, maxFov: 40.0 },
-    manual:   { name: 'マニュアル (広角〜望遠)', sensor: '汎用', zoom: 'マニュアル', sensorW: 9.59, minFov: 0.5, maxFov: 120.0 }
+    nx5r:     { name: 'Sony HXR-NX5R (光学20倍)', sensor: '1/2.8型 3CMOS', zoom: '光学20倍', sensorW: 5.57, fWide: 4.46, fTele: 89.2 },
+    eng_std:  { name: 'ENG 2/3型 標準22倍 (7.6〜167mm)', sensor: '2/3型', zoom: '光学22倍', sensorW: 9.59, fWide: 7.6, fTele: 167.2 },
+    eng_ext:  { name: 'ENG 2/3型 22倍 + 2xエクステンダー (15.2〜334mm)', sensor: '2/3型 (2x エクステンダー ON)', zoom: '光学44倍相当', sensorW: 9.59, fWide: 15.2, fTele: 334.4 },
+    box_tele: { name: '大型ボックス40倍 (14〜560mm)', sensor: '2/3型', zoom: '光学40倍', sensorW: 9.59, fWide: 14, fTele: 560 },
+    manual:   { name: 'マニュアル (制限なし・実機の制約なし)', sensor: '汎用', zoom: 'マニュアル', sensorW: 9.59, minFov: 0.5, maxFov: 120.0 }
   };
+  const fovOf = (f, sw) => 2 * Math.atan(sw / (2 * f)) * 180 / Math.PI;
+  Object.keys(CAMERA_MODELS).forEach(k => {
+    const m = CAMERA_MODELS[k];
+    if (m.fWide && m.fTele) { m.maxFov = Math.round(fovOf(m.fWide, m.sensorW) * 10) / 10; m.minFov = Math.round(fovOf(m.fTele, m.sensorW) * 100) / 100; }
+  });
+
+  /** そのカメラが実際に出せる画角の範囲。センサー幅を変えたときも、焦点距離の限界 (mm) から計算し直す */
+  function getFovLimits(cam) {
+    const m = CAMERA_MODELS[cam && cam.model] || CAMERA_MODELS.manual;
+    if (!(m.fWide && m.fTele)) return { minFov: m.minFov, maxFov: m.maxFov, fWide: null, fTele: null, real: false };
+    const sw = (cam && cam.sensorW > 0) ? cam.sensorW : m.sensorW;
+    return { minFov: fovOf(m.fTele, sw), maxFov: fovOf(m.fWide, sw), fWide: m.fWide, fTele: m.fTele, real: true };
+  }
 
   const SHOT_TYPES = {
     stage_ff: 'ステージ全景',
@@ -298,7 +318,7 @@ window.CameraBase = (function () {
   }
 
   return {
-    CAMERA_MODELS, SHOT_TYPES, DEFAULT_LENS_ABOVE, makeCamera, makePlatform, getSensorW,
+    CAMERA_MODELS, SHOT_TYPES, DEFAULT_LENS_ABOVE, makeCamera, makePlatform, getSensorW, getFovLimits,
     getAll, getById, getSelected, getSelectedId, setSelectedId,
     getPlatforms, getPlatformById, getPlatformOf, getSelectedPlatform, getSelectedPlatformId, setSelectedPlatformId, camerasOn,
     syncFromPlatform, syncAll, moveCameraTo, setLensHeight, setLensAbove, movePlatformTo, distributeOnPlatform, assignCamera,
