@@ -892,6 +892,15 @@
         const half = (aim.fov / 2) * Math.PI / 180, l = aim.hAngle - half, r = aim.hAngle + half;
         const dist = Math.hypot(aim.targetX - cam.x, aim.targetY - cam.y) + 3000;
         const warn = sim.isBlocked || aim.status !== 'ok';
+        ctx.save();                                                      // 扇形は会場の壁の内側だけに描く (広角でも壁の外に出ない)
+        const rp = window.room && window.room.points;
+        let inRoom = false;
+        if (rp && rp.length >= 3) {
+          for (let i = 0, j = rp.length - 1; i < rp.length; j = i++) {
+            if (((rp[i].y > cam.y) !== (rp[j].y > cam.y)) && (cam.x < (rp[j].x - rp[i].x) * (cam.y - rp[i].y) / (rp[j].y - rp[i].y) + rp[i].x)) inRoom = !inRoom;
+          }
+          if (inRoom) { ctx.beginPath(); rp.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath(); ctx.clip(); }
+        }
         ctx.beginPath();
         ctx.moveTo(cam.x, cam.y);
         ctx.lineTo(cam.x + dist * Math.cos(l), cam.y + dist * Math.sin(l));
@@ -914,6 +923,7 @@
         ctx.strokeStyle = sim.isBlocked ? '#dc2626' : '#22c55e';
         ctx.lineWidth = sel ? 35 : 20;
         ctx.stroke();
+        ctx.restore();
       }
 
       drawCameraTop(ctx, cam.x, cam.y, a ? a.aim.hAngle : -Math.PI / 2, sel);
