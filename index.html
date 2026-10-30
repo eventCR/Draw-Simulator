@@ -29,13 +29,16 @@
 
   <!-- 上部ツールバー : ボタンは data-action で core_engine.js の actions に接続 -->
   <header id="top-toolbar">
-    <div class="toolbar-title"><span>📐 Draw-Simulator MarkⅡ</span></div>
+    <div class="toolbar-title"><span>📐 Draw-Simulator MarkⅡ</span><span id="fileLabel" class="file-label">(未保存)</span></div>
     <div class="toolbar-actions">
       <button class="ctrl-btn" id="btnUndo" data-action="undo" title="元に戻す (Ctrl+Z)" disabled>↩️ 戻す</button>
       <button class="ctrl-btn" id="btnRedo" data-action="redo" title="やり直す (Ctrl+Y)" disabled>↪️ 進む</button>
       <span class="toolbar-divider">|</span>
-      <button class="btn-action" data-action="save">💾 名前をつけて保存</button>
+      <button class="btn-action btn-primary" data-action="save" title="上書き保存 (Ctrl+S)">💾 上書き保存</button>
+      <button class="btn-action" data-action="saveAs" title="名前をつけて保存 (Ctrl+Shift+S)">名前をつけて保存</button>
       <button class="btn-action" data-action="open">📂 開く</button>
+      <button class="btn-action" data-action="driveSave" title="Google Drive (共有ドライブ) に保存">☁ Driveに保存</button>
+      <button class="btn-action" data-action="driveOpen" title="Google Drive から開く">☁ Driveから開く</button>
       <input type="file" id="importFile" accept=".json,application/json" hidden>
       <button class="btn-action btn-primary" data-action="exportPng">📸 画像出力 (.png)</button>
       <button class="btn-action btn-primary" data-action="exportPdf">📄 PDF出力</button>
@@ -223,5 +226,7 @@
 
   <script src="measure_tool.js"></script>
   <script src="export_sheet.js"></script>
+  <script src="drive_config.js"></script>
+  <script src="drive_store.js"></script>
 </body>
 </html>

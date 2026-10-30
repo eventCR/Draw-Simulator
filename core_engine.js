@@ -196,6 +196,7 @@
     updateSideScrollRange();
     applySideScroll();
     emit('restore', obj);
+    updateFileLabel();
     requestRender();
   }
 
@@ -224,6 +225,7 @@
     history.index = history.stack.length - 1;
     updateHistoryButtons();
     emit('commit', label);
+    updateFileLabel();
     requestRender();
   }
 
@@ -284,26 +286,95 @@
     const m = document.getElementById('saveModal');
     if (m) m.classList.remove('open');
   }
-  function confirmSave() {
+  // ---- 保存先 (store): ファイルの場所を覚えて「上書き保存」できるようにする ----
+  // kind: 'local' = このパソコン / Drive for desktop の同期フォルダ (File System Access API)。
+  // 将来 kind: 'drive' (Google Drive API) を足せるよう、読み書きはこの層に閉じ込める。
+  const store = { kind: null, handle: null, name: '', stamp: 0, savedSnap: null };
+  const hasFsa = () => typeof window.showSaveFilePicker === 'function' && typeof window.showOpenFilePicker === 'function';
+  const JSON_TYPES = [{ description: 'レイアウト (.json)', accept: { 'application/json': ['.json'] } }];
+
+  function isDirty() { return booted && store.savedSnap !== null ? snapshot() !== store.savedSnap : (booted && history.index > 0); }
+  function updateFileLabel() {
+    const el = document.getElementById('fileLabel');
+    if (!el) return;
+    const dirty = isDirty();
+    el.textContent = (store.name ? store.name : '(未保存)') + (dirty ? ' ●' : '');
+    el.title = store.name ? (dirty ? '未保存の変更があります' : '保存済み') : 'まだ保存していません';
+    document.title = (dirty ? '● ' : '') + (store.name || 'Draw-Simulator MarkⅡ');
+  }
+  function markSaved() { store.savedSnap = snapshot(); updateFileLabel(); }
+  function projectJson() { return JSON.stringify(exportProject(), null, 2); }
+
+  async function writeHandle(handle, text) {
+    const w = await handle.createWritable();
+    try { await w.write(new Blob([text], { type: 'application/json' })); } finally { await w.close(); }
+    store.stamp = (await handle.getFile()).lastModified;
+  }
+
+  /** 名前をつけて保存 (保存先を選び直す) */
+  async function saveAs() {
+    if (!hasFsa()) { openSaveModal(); return; }                     // 非対応ブラウザは従来のダウンロード
+    let handle;
+    try {
+      handle = await window.showSaveFilePicker({ suggestedName: store.name || 'Venue_Layout_Mark2.json', types: JSON_TYPES });
+    } catch (e) { if (e && e.name === 'AbortError') return; log('保存先を選べませんでした: ' + e.message, 'error'); return; }
+    try {
+      await writeHandle(handle, projectJson());
+      Object.assign(store, { kind: 'local', handle, name: handle.name });
+      markSaved();
+      log('保存しました: ' + handle.name, 'info');
+    } catch (e) { log('保存失敗: ' + e.message, 'error'); alert('保存できませんでした。\n' + e.message); }
+  }
+
+  /** 上書き保存 (保存先が未定なら名前をつけて保存) */
+  async function save() {
+    if (store.kind === 'drive' && window.DriveStore) return window.DriveStore.overwrite();
+    if (store.kind !== 'local' || !store.handle) { return saveAs(); }
+    try {
+      const cur = await store.handle.getFile();
+      if (store.stamp && cur.lastModified !== store.stamp) {       // 開いてから他の人 / 他の端末が更新した
+        const ok = confirm('「' + store.name + '」は、開いたあとに別の場所で更新されています。\n\nOK: このまま上書きする\nキャンセル: 保存せず、名前をつけて別に保存できます');
+        if (!ok) { log('上書きをやめました。「名前をつけて保存」で別名にできます', 'warn'); return; }
+      }
+      await writeHandle(store.handle, projectJson());
+      markSaved();
+      log('上書き保存しました: ' + store.name, 'info');
+    } catch (e) { log('上書き失敗: ' + e.message, 'error'); alert('上書き保存できませんでした。\n' + e.message + '\n「名前をつけて保存」をお試しください。'); }
+  }
+
+  function confirmSave() {                                           // 従来のダウンロード保存 (非対応ブラウザ用)
     const inp = document.getElementById('modalFileName');
     const name = sanitizeFileName(inp ? inp.value : '', '.json');
-    const json = JSON.stringify(exportProject(), null, 2);
-    download(new Blob([json], { type: 'application/json' }), name);
+    download(new Blob([projectJson()], { type: 'application/json' }), name);
     closeSaveModal();
+    markSaved();
     log('保存しました: ' + name, 'info');
   }
 
-  function openFilePicker() {
-    const f = document.getElementById('importFile');
-    if (f) f.click();
+  async function openFilePicker() {
+    if (!hasFsa()) { const f = document.getElementById('importFile'); if (f) f.click(); return; }
+    if (isDirty() && !confirm('保存していない変更があります。破棄して開きますか?')) return;
+    let handle;
+    try { [handle] = await window.showOpenFilePicker({ types: JSON_TYPES, multiple: false }); }
+    catch (e) { if (e && e.name === 'AbortError') return; log('ファイルを選べませんでした: ' + e.message, 'error'); return; }
+    try {
+      const file = await handle.getFile();
+      importProject(JSON.parse(await file.text()));
+      commit('ファイルを開く');
+      Object.assign(store, { kind: 'local', handle, name: handle.name, stamp: file.lastModified });
+      markSaved();
+      log('読み込みました: ' + handle.name, 'info');
+    } catch (e) { log('読み込み失敗: ' + e.message, 'error'); alert('ファイルを読み込めませんでした。\n' + e.message); }
   }
-  function handleImportFile(file) {
+  function handleImportFile(file) {                                  // 非対応ブラウザ用 (保存先は覚えない)
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       try {
         importProject(JSON.parse(reader.result));
         commit('ファイルを開く');
+        Object.assign(store, { kind: null, handle: null, name: file.name, stamp: 0 });
+        markSaved();
         log('読み込みました: ' + file.name, 'info');
       } catch (e) {
         log('読み込み失敗: ' + e.message, 'error');
@@ -817,10 +888,13 @@
   // ============================================================================
   const actions = {
     undo, redo,
-    save: openSaveModal,
+    save,
+    saveAs,
     closeSave: closeSaveModal,
     confirmSave,
     open: openFilePicker,
+    driveSave: () => window.DriveStore ? window.DriveStore.saveAs() : log('Drive連携が読み込まれていません', 'warn'),
+    driveOpen: () => window.DriveStore ? window.DriveStore.open() : log('Drive連携が読み込まれていません', 'warn'),
     exportPng,
     exportPdf: () => window.ExportSheet ? window.ExportSheet.exportPdf() : log('書き出しモジュールが読み込まれていません', 'warn'),
     measure: () => {
@@ -891,20 +965,35 @@
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
       const k = e.key.toLowerCase();
-      if (k === 's') { e.preventDefault(); openSaveModal(); return; }
+      if (k === 's') { e.preventDefault(); if (e.shiftKey) saveAs(); else save(); return; }
       if (typing) return;                       // 入力欄は標準の取り消しに任せる
       if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
       else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
     });
 
+    window.addEventListener('beforeunload', e => { if (isDirty()) { e.preventDefault(); e.returnValue = ''; } });
     window.addEventListener('resize', () => { updateCanvasSize(); updateSideScrollRange(); applySideScroll(); });
   }
 
   // ============================================================================
   // 14. 公開 API
   // ============================================================================
+  /** 保存先の拡張 (Google Drive など) 用の窓口 */
+  const fileStore = {
+    get: () => store,
+    set: (o) => { Object.assign(store, o); },
+    projectJson, markSaved, isDirty,
+    /** JSON 文字列を読み込んで、保存先 (meta) を覚える */
+    loadText(text, meta) {
+      importProject(JSON.parse(text));
+      commit('ファイルを開く');
+      Object.assign(store, { kind: null, handle: null, fileId: null, name: '', stamp: 0 }, meta || {});
+      markSaved();
+    }
+  };
+
   window.Core = {
-    APP_ID, FORMAT_VERSION,
+    APP_ID, FORMAT_VERSION, fileStore,
     BASE_SCALE_TOP, BASE_SCALE_SIDE, SIDE_FLOOR_OFFSET_Y,
     register, getModule, on, emit,
     commit, batch, undo, redo,
