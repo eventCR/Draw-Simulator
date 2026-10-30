@@ -6,4 +6,8 @@
  * 空のままでも、他の機能はすべて通常どおり動きます (Drive ボタンを押すと案内が出ます)。
  * これらは公開されても問題ない値です (秘密鍵ではありません)。
  */
-window.DRIVE_CONFIG = { clientId: '', apiKey: '', appId: '' };
+window.DRIVE_CONFIG = {
+  clientId: '107532243052-ckekvo2a5unve97g4op5s3p4bf16t5m6.apps.googleusercontent.com',
+  apiKey: 'AIzaSyBKTozg2D3Frzl_APrZhzv-a_CjhbhY3B8',
+  appId: '107532243052'
+};
