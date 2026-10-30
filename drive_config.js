@@ -9,5 +9,9 @@
 window.DRIVE_CONFIG = {
   clientId: '107532243052-ckekvo2a5unve97g4op5s3p4bf16t5m6.apps.googleusercontent.com',
   apiKey: 'AIzaSyBKTozg2D3Frzl_APrZhzv-a_CjhbhY3B8',
-  appId: '107532243052'
+  appId: '107532243052',
+  // 専用フォルダ: 共有ドライブ内に作った「Draw-Simulator」フォルダのID (フォルダを開いたURLの folders/ の後ろの文字列)。
+  // 設定すると、保存はここだけ・開くもここの中だけになります。空なら、保存のたびにフォルダを選びます。
+  folderId: '1nzvokDAKxgp-ZZ-86FwDv27vdQRFUwqv',
+  folderName: 'Draw-Simulator'
 };

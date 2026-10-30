@@ -8,6 +8,7 @@
   const SCOPE = 'https://www.googleapis.com/auth/drive.file';
   const API = 'https://www.googleapis.com/drive/v3/files';
   const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
+  const FOLDER_MIME = 'application/vnd.google-apps.folder';
   const cfg = () => window.DRIVE_CONFIG || {};
   const log = (m, lv) => window.Core && window.Core.log && window.Core.log(m, lv || 'info');
   const FS = () => window.Core.fileStore;
@@ -62,10 +63,12 @@
     await new Promise(res => gapi.load('picker', res));
     return new Promise((resolve, reject) => {
       const view = new google.picker.DocsView(kind === 'folder' ? google.picker.ViewId.FOLDERS : google.picker.ViewId.DOCS).setIncludeFolders(true);
-      if (kind === 'folder') view.setSelectFolderEnabled(true); else view.setMimeTypes('application/json');
+      if (kind === 'folder') view.setSelectFolderEnabled(true);
+      else if (kind === 'target') view.setSelectFolderEnabled(true).setMimeTypes('application/json,' + FOLDER_MIME);
+      else { view.setMimeTypes('application/json'); if (cfg().folderId) view.setParent(cfg().folderId).setIncludeFolders(false); }
       const b = new google.picker.PickerBuilder()
         .setAppId(cfg().appId).setDeveloperKey(cfg().apiKey).setOAuthToken(token).setLocale('ja')
-        .setTitle(kind === 'folder' ? '保存するフォルダを選んでください (共有ドライブ可)' : '開くファイル (.json) を選んでください')
+        .setTitle(kind === 'target' ? '保存先: フォルダを選ぶと新規保存 / 既存の .json を選ぶと上書き (共有ドライブ可)' : kind === 'folder' ? '保存するフォルダを選んでください (共有ドライブ可)' : (cfg().folderId ? '開くファイル (専用フォルダ内の .json)' : '開くファイル (.json) を選んでください'))
         .enableFeature(google.picker.Feature.SUPPORT_DRIVES)
         .addView(view)
         .setCallback(d => {
@@ -91,18 +94,29 @@
   async function saveAs() {
     try {
       checkReady();
-      const folder = await pick('folder');
-      if (!folder) return;
+      const fixed = cfg().folderId;
+      const target = fixed ? { id: fixed, mimeType: FOLDER_MIME } : await pick('target');   // 専用フォルダが決まっていれば、選ばせずそこに保存
+      if (!target) return;
       const cur = FS().get();
-      let name = prompt('Driveに保存するファイル名 (.json)', cur.name || 'Venue_Layout_Mark2.json');
+      if (target.mimeType !== FOLDER_MIME) {                           // 既存ファイルを指定 → 上書き (専用フォルダ未設定のときだけ)
+        if (!confirm('Drive上の「' + target.name + '」を、今の内容で上書きします。よろしいですか?')) return;
+        const r = await gfetch(UPLOAD + '/' + target.id + '?uploadType=media&supportsAllDrives=true&fields=id,name,modifiedTime', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: FS().projectJson() });
+        const f = await r.json();
+        FS().set({ kind: 'drive', handle: null, fileId: f.id, name: f.name, stamp: f.modifiedTime });
+        FS().markSaved();
+        log('Driveの既存ファイルに上書きしました: ' + f.name, 'info');
+        return;
+      }
+      let name = prompt((fixed ? '専用フォルダ「' + (cfg().folderName || 'Draw-Simulator') + '」に保存します。\n' : '') + 'ファイル名 (.json)', cur.name || 'Venue_Layout_Mark2.json');
       if (!name) return;
+      name = name.trim().replace(/[\\/:*?"<>|]/g, '_');
       if (!/\.json$/i.test(name)) name += '.json';
-      const mp = multipart({ name, parents: [folder.id], mimeType: 'application/json' }, FS().projectJson());
+      const mp = multipart({ name, parents: [target.id], mimeType: 'application/json' }, FS().projectJson());
       const r = await gfetch(UPLOAD + '?uploadType=multipart&supportsAllDrives=true&fields=id,name,modifiedTime', { method: 'POST', headers: { 'Content-Type': mp.type }, body: mp.body });
       const f = await r.json();
       FS().set({ kind: 'drive', handle: null, fileId: f.id, name: f.name, stamp: f.modifiedTime });
       FS().markSaved();
-      log('Driveに保存しました: ' + f.name, 'info');
+      log('Driveに保存しました: ' + f.name + (fixed ? ' (専用フォルダ)' : ''), 'info');
     } catch (e) { fail(e); }
   }
 
@@ -114,7 +128,7 @@
       const m = await meta(st.fileId);
       if (st.stamp && m.modifiedTime !== st.stamp) {
         const who = m.lastModifyingUser && m.lastModifyingUser.displayName ? '(' + m.lastModifyingUser.displayName + ' さん)' : '';
-        if (!confirm('「' + st.name + '」は、開いたあとに別の人 ' + who + ' が更新しています。\n\nOK: このまま上書きする\nキャンセル: 保存しない (「☁ Driveに名前をつけて保存」で別名にできます)')) { log('上書きをやめました', 'warn'); return; }
+        if (!confirm('「' + st.name + '」は、開いたあとに別の人 ' + who + ' が更新しています。\n\nOK: このまま上書きする\nキャンセル: 保存しない (「☁ Driveに保存」で別名にできます)')) { log('上書きをやめました', 'warn'); return; }
       }
       const r = await gfetch(UPLOAD + '/' + st.fileId + '?uploadType=media&supportsAllDrives=true&fields=id,name,modifiedTime', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: FS().projectJson() });
       const f = await r.json();
@@ -141,7 +155,7 @@
     log(e.message, 'error');
     let hint = '';
     if (e.status === 401) hint = '\n(ログインの期限切れかもしれません。もう一度お試しください)';
-    if (e.status === 403 || e.status === 404) hint = '\n(共有ドライブの「投稿者」以上の権限があるか、Pickerで選んだファイルかを確認してください)';
+    if (e.status === 403 || e.status === 404) hint = '\n(専用フォルダのIDが正しいか、共有ドライブの「投稿者」以上の権限があるかを確認してください)';
     alert('Google Driveの操作に失敗しました。\n' + e.message + hint);
   }
 
