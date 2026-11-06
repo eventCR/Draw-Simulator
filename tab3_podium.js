@@ -214,8 +214,8 @@
   function importData(d) {
     if (!d) return;
     const list = Array.isArray(d) ? d : d.podiums;
-    if (Array.isArray(list) && list.length) window.podiums = clone(list);
-    selectedId = window.podiums.some(p => p.id === d.selectedPodiumId) ? d.selectedPodiumId : window.podiums[0].id;
+    if (Array.isArray(list)) window.podiums = clone(list);
+    selectedId = window.podiums.some(p => p.id === d.selectedPodiumId) ? d.selectedPodiumId : (window.podiums[0] ? window.podiums[0].id : null);
     syncUI();
   }
 

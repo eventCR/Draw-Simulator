@@ -905,7 +905,7 @@
       if (!window.seats.length) rebuildSeats();       // 初回のみ初期配置 (履歴の初期状態に含まれる)
     },
     drawTop, drawSide, hitTest, hitFallback, onGrab, handleDrag, exportData, importData, syncUI,
-    getStats, rebuildSeats,
+    getStats, rebuildSeats, clearSeats,
     getGrid: () => clone(grid),
     getGroups: () => groups.map(g => ({ id: g.id, name: g.name, grid: clone(g.grid), table: clone(g.table), count: window.seats.filter(s => groupOf(s) === g).length })),
     getTables: computeTables,

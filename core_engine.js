@@ -342,6 +342,33 @@
     } catch (e) { log('上書き失敗: ' + e.message, 'error'); alert('上書き保存できませんでした。\n' + e.message + '\n「名前をつけて保存」をお試しください。'); }
   }
 
+  /** リセット: 会場 (外形・扉) とステージ本体だけ残し、客席・カメラ・登壇者・司会台・舞台什器・機材・モニター・パネル・スクリーン・図面を全部消す。
+   *  保存先も外す (前のファイルを誤って上書きしない)。「戻す」(Ctrl+Z) で元に戻せる */
+  function resetAll() {
+    const msg = (isDirty() ? '保存していない変更があります。\n' : '') +
+      '会場とステージだけを残して、客席・カメラ・登壇者・司会台・舞台什器・機材・モニター・パネル・スクリーン・図面を全部消します。\n\nリセットしますか?\n(「戻す」で元に戻せます。表示設定は変わりません)';
+    if (!confirm(msg)) return;
+    batch('リセット', () => {
+      const cur = exportProject({ forHistory: true });
+      const m = cur.modules;
+      const keep = (k, d) => Object.assign({}, m[k] || {}, d);
+      m.guests = keep('guests', { list: [], selectedId: null });
+      m.stage_items = keep('stage_items', { stageItems: [], selectedStageItemId: null });
+      m.equipment = keep('equipment', { equipments: [], selectedEquipId: null });
+      m.monitor = keep('monitor', { monitors: [], selectedId: null });
+      m.camera = keep('camera', { list: [], platforms: [], selectedId: null, selectedPlatformId: null });
+      m.podium = keep('podium', { podiums: [], selectedPodiumId: null });
+      m.facility = keep('facility', { panels: [], screens: [], selectedPanelId: '', selectedScreenId: '' });
+      if (m.bgimage) m.bgimage = { bgProps: m.bgimage.bgProps };
+      importProject({ modules: m });
+      const seats = getModule('seats');
+      if (seats && typeof seats.clearSeats === 'function') seats.clearSeats(true);
+    });
+    Object.assign(store, { kind: null, handle: null, fileId: null, name: '', stamp: 0 });
+    markSaved();
+    log('リセットしました (会場とステージ以外を全部消し、保存先も外しました)', 'info');
+  }
+
   function confirmSave() {                                           // 従来のダウンロード保存 (非対応ブラウザ用)
     const inp = document.getElementById('modalFileName');
     const name = sanitizeFileName(inp ? inp.value : '', '.json');
@@ -890,6 +917,7 @@
     undo, redo,
     save,
     saveAs,
+    resetAll,
     closeSave: closeSaveModal,
     confirmSave,
     open: openFilePicker,
